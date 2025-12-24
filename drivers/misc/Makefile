@@ -63,6 +63,7 @@ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_QSEECOM)		+= qseecom-mod.o
 qseecom-mod-y			:= qseecom.o
 qseecom-mod-$(CONFIG_COMPAT)	+= compat_qseecom.o
+obj-$(CONFIG_KPROFILES)         += kprofiles/
 
 # ifdef VENDOR_EDIT
 obj-$(CONFIG_CS_F61_NDT) 	+= cs_press/

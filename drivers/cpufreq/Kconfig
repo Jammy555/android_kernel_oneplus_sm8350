@@ -58,6 +58,95 @@ config CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
 
 endchoice
 
+config CPU_FREQ_GOV_PERFORMANCE
+	tristate "'performance' governor"
+	help
+	  This cpufreq governor sets the frequency statically to the
+	  highest available CPU frequency.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_performance.
+
+	  If in doubt, say Y.
+
+config CPU_FREQ_GOV_POWERSAVE
+	tristate "'powersave' governor"
+	help
+	  This cpufreq governor sets the frequency statically to the
+	  lowest available CPU frequency.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_powersave.
+
+	  If in doubt, say Y.
+
+config CPU_FREQ_GOV_USERSPACE
+	tristate "'userspace' governor for userspace frequency scaling"
+	help
+	  Enable this cpufreq governor when you either want to set the
+	  CPU frequency manually or when a userspace program shall
+	  be able to set the CPU dynamically, like on LART 
+	  <http://www.lartmaker.nl/>.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_userspace.
+
+	  For details, take a look at <file:Documentation/cpu-freq/>.
+
+	  If in doubt, say Y.
+
+config CPU_FREQ_GOV_ONDEMAND
+	tristate "'ondemand' cpufreq policy governor"
+	select CPU_FREQ_GOV_COMMON
+	help
+	  'ondemand' - This driver adds a dynamic cpufreq policy governor.
+	  The governor does a periodic polling and 
+	  changes frequency based on the CPU utilization.
+	  The support for this governor depends on CPU capability to
+	  do fast frequency switching (i.e, very low latency frequency
+	  transitions). 
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_ondemand.
+
+	  For details, take a look at linux/Documentation/cpu-freq.
+
+	  If in doubt, say N.
+
+config CPU_FREQ_GOV_CONSERVATIVE
+	tristate "'conservative' cpufreq governor"
+	depends on CPU_FREQ
+	select CPU_FREQ_GOV_COMMON
+	help
+	  'conservative' - this driver is rather similar to the 'ondemand'
+	  governor both in its source code and its purpose, the difference is
+	  its optimisation for better suitability in a battery powered
+	  environment.  The frequency is gracefully increased and decreased
+	  rather than jumping to 100% when speed is required.
+
+	  If you have a desktop machine then you should really be considering
+	  the 'ondemand' governor instead, however if you are using a laptop,
+	  PDA or even an AMD64 based computer (due to the unacceptable
+	  step-by-step latency issues between the minimum and maximum frequency
+	  transitions in the CPU) you will probably want to use this governor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_conservative.
+
+	  For details, take a look at linux/Documentation/cpu-freq.
+
+	  If in doubt, say N.
+
+config CPU_BOOST
+	tristate "Event base short term CPU freq boost"
+	depends on CPU_FREQ
+	help
+	  This driver boosts the frequency of one or more CPUs based on
+	  various events that might occur in the system. As of now, the
+	  events it reacts to are:
+	  - Migration of important threads from one CPU to another.
+
+	  If in doubt, say N.
 config CPU_FREQ_GOV_SCHEDUTIL
 	bool "'schedutil' cpufreq policy governor"
 	depends on CPU_FREQ && SMP
@@ -75,6 +164,123 @@ config CPU_FREQ_GOV_SCHEDUTIL
 	  both cases.
 
 	  If in doubt, say N.
+
+config CPU_INPUT_BOOST
+	bool "CPU Input Boost"
+	help
+	  Boosts the CPU on touchscreen and touchpad input, and allows for
+	  boosting on other custom events, mainly which is intended to be for
+	  boosting when there is a new frame ready to be rendered to the
+	  display. The boost frequencies for this driver should be set so that
+	  frame drops are near-zero at the boosted frequencies and power
+	  consumption is minimized at said frequency combination.
+
+if CPU_INPUT_BOOST
+
+config INPUT_BOOST_DURATION_MS
+	int "Input boost duration"
+	default "100"
+	help
+	  Input boost duration in milliseconds.
+
+config WAKE_BOOST_DURATION_MS
+	int "Wake boost duration"
+	default "1000"
+	help
+	  Wake boost duration in milliseconds.
+
+config INPUT_BOOST_FREQ_LP
+	int "Low-power cluster boost freq"
+	default "0"
+	help
+	  Input boost frequency for the low-power CPU cluster.
+
+config INPUT_BOOST_FREQ_PERF
+	int "Performance cluster boost freq"
+	default "0"
+	help
+	  Input boost frequency for the performance CPU cluster.
+
+config INPUT_BOOST_FREQ_PERFP
+	int "Prime cluster boost freq"
+	default "0"
+	help
+	  Input boost frequency for the prime CPU cluster.
+
+config MAX_BOOST_FREQ_LP
+	int "Low-power cluster max-boost freq"
+	default "0"
+	help
+	  Max-boost frequency for the low-power CPU cluster.
+
+config MAX_BOOST_FREQ_PERF
+	int "Performance cluster max-boost freq"
+	default "0"
+	help
+	  Max-boost frequency for the performance CPU cluster.
+
+config MAX_BOOST_FREQ_PERFP
+	int "Prime cluster max-boost freq"
+	default "0"
+	help
+	  Max-boost frequency for the prime CPU cluster.
+
+
+config CPU_FREQ_MIN_LP
+	int "Default minimum frequency for the little cluster"
+	default 0
+	help
+	  This sets the default minimum frequency (in kHz) for the little CPU
+	  cluster.
+
+	  If in doubt, say 0 to use the hardware's minimum frequency.
+
+config CPU_FREQ_MIN_PERF
+	int "Default minimum frequency for the big cluster"
+	default 0
+	help
+	  This sets the default minimum frequency (in kHz) for the big CPU
+	  cluster.
+
+	  If in doubt, say 0 to use the hardware's minimum frequency.
+
+config CPU_FREQ_MIN_PERFP
+	int "Default minimum frequency for the prime cluster"
+	default 0
+	help
+	  This sets the default minimum frequency (in kHz) for the prime CPU
+	  cluster.
+
+	  If in doubt, say 0 to use the hardware's minimum frequency.
+
+config CPU_FREQ_IDLE_LP
+	int "Default idle frequency for the little cluster"
+	default 0
+	help
+	  This sets the default idle frequency (in kHz) for the little CPU
+	  cluster.
+
+	  If in doubt, say 0 to use the hardware's minimum frequency.
+
+config CPU_FREQ_IDLE_PERF
+	int "Default idle frequency for the big cluster"
+	default 0
+	help
+	  This sets the default idle frequency (in kHz) for the big CPU
+	  cluster.
+
+	  If in doubt, say 0 to use the hardware's minimum frequency.
+
+config CPU_FREQ_IDLE_PERFP
+	int "Default idle frequency for the prime cluster"
+	default 0
+	help
+	  This sets the default idle frequency (in kHz) for the prime CPU
+	  cluster.
+
+	  If in doubt, say 0 to use the hardware's minimum frequency.
+
+endif
 
 comment "CPU frequency scaling drivers"
 
