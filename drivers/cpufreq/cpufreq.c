@@ -774,8 +774,20 @@ static ssize_t store_##file_name					\
 	if (ret != 1)							\
 		return -EINVAL;						\
 									\
-	if (kp_active_mode() == 1)					\
-		return count;						\
+	if (kp_active_mode() == 1) {					\
+		if (&policy->object == &policy->max) {				\
+			extern int kp_max_freq_ratio(void);			\
+			unsigned long ratio = kp_max_freq_ratio();		\
+			unsigned long kp_ceil = (policy->cpuinfo.max_freq * ratio) / 100;\
+			if (val > kp_ceil)					\
+				val = kp_ceil;					\
+		}								\
+		if (&policy->object == &policy->min) {				\
+			unsigned long kp_min = policy->cpuinfo.min_freq;	\
+			if (val > kp_min)					\
+				val = kp_min;					\
+		}								\
+	}									\
 									\
 	if (&policy->object == &policy->max)				\
 		if (val < policy->min)					\
