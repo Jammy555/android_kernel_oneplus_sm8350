@@ -46,6 +46,13 @@ module_param(auto_kp, bool, 0664);
 MODULE_PARM_DESC(auto_kp, "Enable/disable automatic kernel profile management");
 
 static unsigned int kp_mode = CONFIG_KP_DEFAULT_MODE;
+static unsigned int kp_max_freq_ratio_val = 75;
+
+int kp_max_freq_ratio(void)
+{
+	return READ_ONCE(kp_max_freq_ratio_val);
+}
+EXPORT_SYMBOL_GPL(kp_max_freq_ratio);
 
 static struct kobject *kp_kobj;
 
@@ -257,8 +264,37 @@ static inline ssize_t kp_mode_store(struct kobject *kobj,
 static struct kobj_attribute kp_mode_attribute =
 	__ATTR(kp_mode, 0664, kp_mode_show, kp_mode_store);
 
+static inline ssize_t kp_max_freq_ratio_show(struct kobject *kobj,
+				   struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", READ_ONCE(kp_max_freq_ratio_val));
+}
+
+static inline ssize_t kp_max_freq_ratio_store(struct kobject *kobj,
+				    struct kobj_attribute *attr,
+				    const char *buf, size_t count)
+{
+	unsigned int new_ratio;
+	int ret;
+
+	ret = kstrtouint(buf, 10, &new_ratio);
+	if (ret)
+		return ret;
+
+	if (new_ratio < 10 || new_ratio > 100)
+		return -EINVAL;
+
+	WRITE_ONCE(kp_max_freq_ratio_val, new_ratio);
+
+	return count;
+}
+
+static struct kobj_attribute kp_max_freq_ratio_attribute =
+	__ATTR(kp_max_freq_ratio, 0664, kp_max_freq_ratio_show, kp_max_freq_ratio_store);
+
 static struct attribute *kp_attrs[] = {
 	&kp_mode_attribute.attr,
+	&kp_max_freq_ratio_attribute.attr,
 	NULL,
 };
 
