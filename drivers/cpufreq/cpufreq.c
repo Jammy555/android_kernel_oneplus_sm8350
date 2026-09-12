@@ -763,6 +763,17 @@ static ssize_t store_##file_name					\
 			extern int kp_max_freq_ratio(void);			\
 			unsigned long ratio = kp_max_freq_ratio();		\
 			unsigned long kp_ceil = (policy->cpuinfo.max_freq * ratio) / 100;\
+			/* Snap kp_ceil down to nearest valid OPP step */	\
+			if (policy->freq_table) {				\
+				struct cpufreq_frequency_table *pos;		\
+				unsigned long best = 0;				\
+				cpufreq_for_each_valid_entry(pos, policy->freq_table) {\
+					if (pos->frequency <= kp_ceil &&		\
+					    pos->frequency > best)		\
+						best = pos->frequency;		\
+				}						\
+				if (best > 0) kp_ceil = best;			\
+			}							\
 			if (val > kp_ceil)					\
 				val = kp_ceil;					\
 		}								\
