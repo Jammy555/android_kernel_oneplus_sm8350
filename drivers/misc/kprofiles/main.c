@@ -46,7 +46,7 @@ module_param(auto_kp, bool, 0664);
 MODULE_PARM_DESC(auto_kp, "Enable/disable automatic kernel profile management");
 
 static unsigned int kp_mode = CONFIG_KP_DEFAULT_MODE;
-static unsigned int kp_max_freq_ratio_val = 75;
+static unsigned int kp_max_freq_ratio_val = 78;
 
 int kp_max_freq_ratio(void)
 {
