@@ -260,11 +260,15 @@ void escape_to_root_for_adb_root(void)
 #ifdef CONFIG_KSU_SUSFS
 #define KERNEL_INIT_DOMAIN "u:r:init:s0"
 #define KERNEL_ZYGOTE_DOMAIN "u:r:zygote:s0"
+#define KERNEL_APP_ZYGOTE_DOMAIN "u:r:app_zygote:s0"
+#define KERNEL_WEBVIEW_ZYGOTE_DOMAIN "u:r:webview_zygote:s0"
 #define KERNEL_PRIV_APP_DOMAIN "u:r:priv_app:s0:c512,c768"
 
 u32 susfs_ksu_sid = 0;
 u32 susfs_init_sid = 0;
 u32 susfs_zygote_sid = 0;
+u32 susfs_app_zygote_sid = 0;
+u32 susfs_webview_zygote_sid = 0;
 u32 susfs_priv_app_sid = 0;
 
 static inline void susfs_set_sid(const char *secctx_name, u32 *out_sid)
@@ -323,10 +327,12 @@ u32 susfs_get_current_sid(void) {
 void susfs_set_zygote_sid(void)
 {
     susfs_set_sid(KERNEL_ZYGOTE_DOMAIN, &susfs_zygote_sid);
+    susfs_set_sid(KERNEL_APP_ZYGOTE_DOMAIN, &susfs_app_zygote_sid);
+    susfs_set_sid(KERNEL_WEBVIEW_ZYGOTE_DOMAIN, &susfs_webview_zygote_sid);
 }
 
 bool susfs_is_current_zygote_domain(void) {
-    return unlikely(current_sid() == susfs_zygote_sid);
+    return unlikely(current_sid() == susfs_zygote_sid || current_sid() == susfs_app_zygote_sid || current_sid() == susfs_webview_zygote_sid);
 }
 
 void susfs_set_ksu_sid(void)
