@@ -46,6 +46,8 @@ static inline bool is_zygote_normal_app_uid(uid_t uid)
 }
 
 extern u32 susfs_zygote_sid;
+extern u32 susfs_app_zygote_sid;
+extern u32 susfs_webview_zygote_sid;
 extern struct cred *ksu_cred;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
@@ -101,14 +103,22 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     uid_t new_uid = ruid;
     uid_t old_uid = current_uid().val;
 
-    // We only interest in process spwaned by zygote
-    if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid)) {
+    // We only interest in process spawned by zygote, app_zygote, or webview_zygote
+    if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid) &&
+        !susfs_is_sid_equal(current_cred(), susfs_app_zygote_sid) &&
+        !susfs_is_sid_equal(current_cred(), susfs_webview_zygote_sid)) {
+        if (is_zygote_isolated_service_uid(new_uid) || is_zygote_normal_app_uid(new_uid)) {
+            pr_info("susfs: setresuid sid mismatch for uid %u (old %u, pid %d): sid=%u, zygote_sid=%u, app_zygote_sid=%u, webview_zygote_sid=%u\n",
+                    new_uid, old_uid, current->pid, susfs_get_current_sid(), susfs_zygote_sid, susfs_app_zygote_sid, susfs_webview_zygote_sid);
+        }
         return 0;
     }
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
     // Check if spawned process is isolated service first, and force to do umount if so  
     if (is_zygote_isolated_service_uid(new_uid)) {
+        pr_info("susfs: isolated service detected for uid %u (pid %d, sid %u), forcing umount\n",
+                new_uid, current->pid, susfs_get_current_sid());
         goto do_umount;
     }
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
