@@ -433,6 +433,11 @@ orig_flow:
 #endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 
 	if (file) {
+		struct dentry *dentry = file->f_path.dentry;
+		if (dentry && strstr(dentry->d_name.name, "lineage")) {
+			name = "/system/framework/framework-res.apk";
+			goto done;
+		}
 		seq_pad(m, ' ');
 		seq_file_path(m, file, "\n");
 		goto done;
