@@ -1366,28 +1366,15 @@ static inline bool tcp_is_cwnd_limited(const struct sock *sk)
  * Return true if TCP stack should pace packets itself.
  */
 #if (defined(CONFIG_DEFAULT_BBR) || defined(CONFIG_DEFAULT_BBR2)) && !defined(CONFIG_DEFAULT_FQ)
-// FORCE ENABLE TCP INTERNAL PACING with default BBR without FQ
 static inline bool tcp_needs_internal_pacing(struct sock *sk)
 {
 	sk->sk_pacing_status = SK_PACING_NEEDED;
 	return true;
 }
 #else
-static inline bool tcp_needs_internal_pacing(struct sock *sk)
+static inline bool tcp_needs_internal_pacing(const struct sock *sk)
 {
-	if (smp_load_acquire(&sk->sk_pacing_status) == SK_PACING_FQ)
-		return false;
-
-	if (smp_load_acquire(&sk->sk_pacing_status) == SK_PACING_NEEDED)
-		return true;
-
-	if (inet_csk(sk)->icsk_ca_ops &&
-	    !strcmp(inet_csk(sk)->icsk_ca_ops->name, "bbr")) {
-		sk->sk_pacing_status = SK_PACING_NEEDED;
-		return true;
-	}
-
-	return false;
+	return smp_load_acquire(&sk->sk_pacing_status) == SK_PACING_NEEDED;
 }
 #endif
 
