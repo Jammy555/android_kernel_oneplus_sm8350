@@ -12,6 +12,12 @@
 #include <linux/wait.h>
 #include <linux/rwsem.h>
 
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+#include <linux/susfs.h>
+DECLARE_STATIC_KEY_FALSE(susfs_is_uname_spoof_buffer_set);
+extern void susfs_spoof_uname(struct new_utsname* tmp);
+#endif
+
 #ifdef CONFIG_PROC_SYSCTL
 
 static void *get_uts(struct ctl_table *table)
@@ -47,6 +53,20 @@ static int proc_do_uts_string(struct ctl_table *table, int write,
 	 */
 	down_read(&uts_sem);
 	memcpy(tmp_data, get_uts(table), sizeof(tmp_data));
+
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+	if (!write && static_branch_unlikely(&susfs_is_uname_spoof_buffer_set)) {
+		struct new_utsname tmp;
+		memset(&tmp, 0, sizeof(tmp));
+		susfs_spoof_uname(&tmp);
+		if (table->data == init_uts_ns.name.release && tmp.release[0]) {
+			strlcpy(tmp_data, tmp.release, sizeof(tmp_data));
+		} else if (table->data == init_uts_ns.name.version && tmp.version[0]) {
+			strlcpy(tmp_data, tmp.version, sizeof(tmp_data));
+		}
+	}
+#endif
+
 	up_read(&uts_sem);
 	r = proc_dostring(&uts_table, write, buffer, lenp, ppos);
 

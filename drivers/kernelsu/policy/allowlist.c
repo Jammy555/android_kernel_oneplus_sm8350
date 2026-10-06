@@ -3,6 +3,7 @@
 #include <linux/rculist.h>
 #include <linux/mutex.h>
 #include <linux/task_work.h>
+#include <linux/workqueue.h>
 #include <linux/capability.h>
 #include <linux/compiler.h>
 #include <linux/fs.h>
@@ -434,7 +435,9 @@ static void allowlist_discard_partial_file(const char *path_str)
 	path_put(&path);
 }
 
-static void do_persistent_allow_list(struct callback_head *_cb)
+static struct work_struct ksu_save_allow_list_work;
+
+static void do_persistent_allow_list(struct work_struct *work)
 {
     u32 magic = FILE_MAGIC;
     u32 version = FILE_FORMAT_VERSION;
@@ -487,36 +490,11 @@ close_file:
     filp_close(fp, 0);
 out:
     revert_creds(saved);
-    kfree(_cb);
 }
 
-void ksu_persistent_allow_list()
+void ksu_persistent_allow_list(void)
 {
-	struct task_struct *tsk;
-
-	rcu_read_lock();
-	tsk = get_pid_task(find_vpid(1), PIDTYPE_PID);
-	if (!tsk) {
-		rcu_read_unlock();
-		pr_err("save_allow_list find init task err\n");
-		return;
-	}
-	rcu_read_unlock();
-
-	struct callback_head *cb =
-		kzalloc(sizeof(struct callback_head), GFP_KERNEL);
-	if (!cb) {
-		pr_err("save_allow_list alloc cb err\b");
-		goto put_task;
-	}
-	cb->func = do_persistent_allow_list;
-	if (task_work_add(tsk, cb, TWA_RESUME)) {
-		kfree(cb);
-		pr_warn("save_allow_list add task_work failed\n");
-	}
-
-put_task:
-	put_task_struct(tsk);
+    schedule_work(&ksu_save_allow_list_work);
 }
 
 static void migrate_profile(u32 version, struct app_profile *profile)
@@ -652,6 +630,7 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *),
 
 void __init ksu_allowlist_init(void)
 {
+	INIT_WORK(&ksu_save_allow_list_work, do_persistent_allow_list);
 	init_default_profiles();
 }
 
@@ -660,6 +639,8 @@ void __exit ksu_allowlist_exit(void)
 	struct perm_data *np = NULL;
 	struct hlist_node *tmp;
 	int i;
+
+	cancel_work_sync(&ksu_save_allow_list_work);
 
 	// free allowlist
 	mutex_lock(&allowlist_mutex);

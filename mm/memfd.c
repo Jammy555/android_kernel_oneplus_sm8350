@@ -19,6 +19,9 @@
 #include <linux/shmem_fs.h>
 #include <linux/memfd.h>
 #include <uapi/linux/memfd.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_MEMFD
+#include <linux/susfs.h>
+#endif
 
 /*
  * We need a tag: a new tag would expand every xa_node by 8 bytes,
@@ -332,6 +335,12 @@ SYSCALL_DEFINE2(memfd_create,
 		file_seals = memfd_file_seals_ptr(file);
 		*file_seals &= ~F_SEAL_SEAL;
 	}
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MEMFD
+	if (file->f_inode && file->f_inode->i_mapping && susfs_sus_memfd(name + MFD_NAME_PREFIX_LEN)) {
+		set_bit(AS_FLAGS_SUS_MEMFD, &file->f_inode->i_mapping->flags);
+	}
+#endif
 
 	fd_install(fd, file);
 	kfree(name);

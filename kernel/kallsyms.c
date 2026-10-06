@@ -688,7 +688,137 @@ static int s_show(struct seq_file *m, void *p)
 			susfs_starts_with(iter->name, "do_ksu") ||
 			susfs_starts_with(iter->name, "ksuver") ||
 			strstr(iter->name, ".ksu_") ||
-			susfs_starts_with(iter->name, "is_zygote"))
+			susfs_starts_with(iter->name, "is_zygote") ||
+			/* Root grant & permission checks */
+			susfs_starts_with(iter->name, "do_grant_root") ||
+			susfs_starts_with(iter->name, "do_uid_granted_root") ||
+			susfs_starts_with(iter->name, "do_uid_should_umount") ||
+			susfs_starts_with(iter->name, "search_manager") ||
+			susfs_starts_with(iter->name, "manager_or_root") ||
+			susfs_starts_with(iter->name, "only_manager") ||
+			susfs_starts_with(iter->name, "only_root") ||
+			susfs_starts_with(iter->name, "allowed_for_su") ||
+			susfs_starts_with(iter->name, "always_allow") ||
+			susfs_starts_with(iter->name, "crown_manager") ||
+			susfs_starts_with(iter->name, "forbid_system_uid") ||
+			susfs_starts_with(iter->name, "escape_with_root") ||
+			susfs_starts_with(iter->name, "disable_seccomp") ||
+			/* Supercall dispatch handlers (do_get_*, do_set_*, do_*) */
+			susfs_starts_with(iter->name, "do_get_") ||
+			susfs_starts_with(iter->name, "do_set_") ||
+			susfs_starts_with(iter->name, "do_new_get_") ||
+			susfs_starts_with(iter->name, "do_stop_") ||
+			susfs_starts_with(iter->name, "do_manage_mark") ||
+			susfs_starts_with(iter->name, "do_report_event") ||
+			susfs_starts_with(iter->name, "do_nuke_ext4") ||
+			susfs_starts_with(iter->name, "do_check_safemode") ||
+			susfs_starts_with(iter->name, "do_disable_escape") ||
+			susfs_starts_with(iter->name, "do_persistent_allow") ||
+			susfs_starts_with(iter->name, "do_mount") ||
+			/* Feature toggles */
+			susfs_starts_with(iter->name, "su_compat_feature") ||
+			susfs_starts_with(iter->name, "sulog_feature") ||
+			susfs_starts_with(iter->name, "kernel_adb_root_feature") ||
+			susfs_starts_with(iter->name, "kernel_umount_feature") ||
+			susfs_starts_with(iter->name, "selinux_hide_status_feature") ||
+			susfs_starts_with(iter->name, "avc_spoof_feature") ||
+			/* SELinux hook/unhook & AVC */
+			susfs_starts_with(iter->name, "hook_proc_attr") ||
+			susfs_starts_with(iter->name, "hook_selinux") ||
+			susfs_starts_with(iter->name, "unhook_proc_attr") ||
+			susfs_starts_with(iter->name, "unhook_selinux") ||
+			susfs_starts_with(iter->name, "initialize_fake") ||
+			susfs_starts_with(iter->name, "slow_avc_audit") ||
+			susfs_starts_with(iter->name, "reset_avc_cache") ||
+			susfs_starts_with(iter->name, "avc_ss_reset") ||
+			/* SELinux policy engine (sepol/avtab/hashtab) */
+			susfs_starts_with(iter->name, "sepol_") ||
+			susfs_starts_with(iter->name, "copy_avtab") ||
+			susfs_starts_with(iter->name, "copy_class_datum") ||
+			susfs_starts_with(iter->name, "copy_filename_trans") ||
+			susfs_starts_with(iter->name, "copy_hashtab_node") ||
+			susfs_starts_with(iter->name, "copy_permissive") ||
+			susfs_starts_with(iter->name, "copy_role_datum") ||
+			susfs_starts_with(iter->name, "copy_type_datum") ||
+			susfs_starts_with(iter->name, "free_class_datum") ||
+			susfs_starts_with(iter->name, "free_filename_trans") ||
+			susfs_starts_with(iter->name, "free_module_rc") ||
+			susfs_starts_with(iter->name, "free_permissive") ||
+			susfs_starts_with(iter->name, "free_role_datum") ||
+			susfs_starts_with(iter->name, "free_type_datum") ||
+			susfs_starts_with(iter->name, "destroy_class_datum") ||
+			susfs_starts_with(iter->name, "destroy_hashtab_node") ||
+			susfs_starts_with(iter->name, "destroy_kprobe") ||
+			susfs_starts_with(iter->name, "destroy_kretprobe") ||
+			susfs_starts_with(iter->name, "destroy_role_datum") ||
+			susfs_starts_with(iter->name, "shallow_copy_hashtab") ||
+			susfs_starts_with(iter->name, "remove_avtab_node") ||
+			susfs_starts_with(iter->name, "hashtab_insert") ||
+			susfs_starts_with(iter->name, "filenametr_") ||
+			susfs_starts_with(iter->name, "set_type_state") ||
+			susfs_starts_with(iter->name, "set_expected_size") ||
+			susfs_starts_with(iter->name, "transive_to_domain") ||
+			susfs_starts_with(iter->name, "is_redundant_avtab") ||
+			susfs_starts_with(iter->name, "is_sid_match") ||
+			susfs_starts_with(iter->name, "get_sid") ||
+			susfs_starts_with(iter->name, "cache_sid") ||
+			susfs_starts_with(iter->name, "calc_hash") ||
+			susfs_starts_with(iter->name, "put_perm_data") ||
+			susfs_starts_with(iter->name, "release_perm_data") ||
+			/* Ksud runtime & init hooks */
+			susfs_starts_with(iter->name, "is_init_rc") ||
+			susfs_starts_with(iter->name, "is_exec_adbd") ||
+			susfs_starts_with(iter->name, "is_libadbroot") ||
+			susfs_starts_with(iter->name, "is_uid_exist") ||
+			susfs_starts_with(iter->name, "is_volumedown") ||
+			susfs_starts_with(iter->name, "on_boot_completed") ||
+			susfs_starts_with(iter->name, "on_module_mounted") ||
+			susfs_starts_with(iter->name, "stop_execve_hook") ||
+			susfs_starts_with(iter->name, "stop_init_rc_hook") ||
+			susfs_starts_with(iter->name, "load_module_rc") ||
+			susfs_starts_with(iter->name, "add_try_umount") ||
+			susfs_starts_with(iter->name, "umount_tw_func") ||
+			susfs_starts_with(iter->name, "input_handle_event_handler") ||
+			susfs_starts_with(iter->name, "reboot_handler") ||
+			/* fops/ELF/mount helpers */
+			susfs_starts_with(iter->name, "patch_fops") ||
+			susfs_starts_with(iter->name, "resolve_fops") ||
+			susfs_starts_with(iter->name, "open_elf") ||
+			susfs_starts_with(iter->name, "close_elf") ||
+			susfs_starts_with(iter->name, "read_exact") ||
+			susfs_starts_with(iter->name, "read_iter_proxy") ||
+			susfs_starts_with(iter->name, "read_length_prefixed") ||
+			susfs_starts_with(iter->name, "read_proxy") ||
+			susfs_starts_with(iter->name, "setup_ld_preload") ||
+			susfs_starts_with(iter->name, "setup_mount_ns") ||
+			susfs_starts_with(iter->name, "setup_groups") ||
+			susfs_starts_with(iter->name, "nuke_ext4") ||
+			susfs_starts_with(iter->name, "watch_one_dir") ||
+			susfs_starts_with(iter->name, "unwatch_one_dir") ||
+			/* Profile & mark management */
+			susfs_starts_with(iter->name, "migrate_profile") ||
+			susfs_starts_with(iter->name, "profile_valid") ||
+			susfs_starts_with(iter->name, "handle_process_mark") ||
+			susfs_starts_with(iter->name, "get_pkg_from_apk") ||
+			susfs_starts_with(iter->name, "seccomp_filter_release") ||
+			/* Syscall handler tracepoints */
+			susfs_starts_with(iter->name, "sys_execve_handler") ||
+			susfs_starts_with(iter->name, "sys_execveat_handler") ||
+			susfs_starts_with(iter->name, "sys_fstat_handler") ||
+			susfs_starts_with(iter->name, "sys_read_handler") ||
+			susfs_starts_with(iter->name, "syscall_regfunc") ||
+			susfs_starts_with(iter->name, "syscall_unregfunc") ||
+			/* Misc internal helpers */
+			susfs_starts_with(iter->name, "check_argv") ||
+			susfs_starts_with(iter->name, "check_block") ||
+			susfs_starts_with(iter->name, "check_init_path") ||
+			susfs_starts_with(iter->name, "check_syscall_fastpath") ||
+			susfs_starts_with(iter->name, "check_v2_signature") ||
+			susfs_starts_with(iter->name, "find_kernel_symbol") ||
+			susfs_starts_with(iter->name, "lookup_symbol_variant") ||
+			susfs_starts_with(iter->name, "phys_from_virt") ||
+			susfs_starts_with(iter->name, "on_post_fs_data_cbfun") ||
+			susfs_starts_with(iter->name, "handle_sepolicy_fn"))
 		{
 			return 0;
 		}
