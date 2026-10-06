@@ -682,6 +682,12 @@ static int s_show(struct seq_file *m, void *p)
 			susfs_starts_with(iter->name, "handle_sepolicy") ||
 			susfs_starts_with(iter->name, "getenforce") ||
 			susfs_starts_with(iter->name, "setenforce") ||
+			susfs_starts_with(iter->name, "anon_ksu") ||
+			susfs_starts_with(iter->name, "setup_ksu") ||
+			susfs_starts_with(iter->name, "is_task_ksu") ||
+			susfs_starts_with(iter->name, "do_ksu") ||
+			susfs_starts_with(iter->name, "ksuver") ||
+			strstr(iter->name, ".ksu_") ||
 			susfs_starts_with(iter->name, "is_zygote"))
 		{
 			return 0;
