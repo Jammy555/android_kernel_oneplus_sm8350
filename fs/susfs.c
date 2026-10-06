@@ -37,9 +37,9 @@ extern int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt);
 extern struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt);
 
 #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
-DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
-#define SUSFS_LOGI(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_info("susfs:[%u][%d][%s] " fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
-#define SUSFS_LOGE(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_err("susfs:[%u][%d][%s]" fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
+DEFINE_STATIC_KEY_FALSE(susfs_is_log_enabled);
+#define SUSFS_LOGI(fmt, ...) if (static_branch_unlikely(&susfs_is_log_enabled)) pr_info("susfs:[%u][%d][%s] " fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
+#define SUSFS_LOGE(fmt, ...) if (static_branch_unlikely(&susfs_is_log_enabled)) pr_err("susfs:[%u][%d][%s]" fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
 #else
 #define SUSFS_LOGI(fmt, ...) 
 #define SUSFS_LOGE(fmt, ...) 
@@ -658,7 +658,12 @@ out_spoof_kstat:
 
 int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse) {
 	struct st_susfs_sus_kstat_hlist *entry = NULL;
-	struct inode *target_inode = inode;
+	struct inode *target_inode;
+
+	if (!inode)
+		return -EINVAL;
+
+	target_inode = inode;
 
 	if (*is_fuse)
 		target_inode = &get_fuse_inode(inode)->inode;
@@ -1196,6 +1201,71 @@ out_copy_to_user:
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
+/* sus_memfd */
+#ifdef CONFIG_KSU_SUSFS_SUS_MEMFD
+static LIST_HEAD(LH_SUS_MEMFD);
+static DEFINE_SPINLOCK(susfs_spin_lock_sus_memfd);
+
+int susfs_add_sus_memfd(void __user **user_info) {
+	struct st_susfs_sus_memfd info = {0};
+	struct st_susfs_sus_memfd_list *new_entry;
+	unsigned long flags;
+
+	if (copy_from_user(&info, (struct st_susfs_sus_memfd __user *)*user_info, sizeof(info))) {
+		info.err = -EFAULT;
+		goto out_copy_to_user;
+	}
+
+	if (*info.target_pathname == '\0') {
+		info.err = -EINVAL;
+		goto out_copy_to_user;
+	}
+
+	new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+	if (!new_entry) {
+		info.err = -ENOMEM;
+		goto out_copy_to_user;
+	}
+
+	strscpy(new_entry->info.target_pathname, info.target_pathname, SUSFS_MAX_LEN_PATHNAME);
+
+	spin_lock_irqsave(&susfs_spin_lock_sus_memfd, flags);
+	list_add_tail_rcu(&new_entry->list, &LH_SUS_MEMFD);
+	spin_unlock_irqrestore(&susfs_spin_lock_sus_memfd, flags);
+
+	info.err = 0;
+	SUSFS_LOGI("sus_memfd added: '%s'\n", new_entry->info.target_pathname);
+
+out_copy_to_user:
+	if (copy_to_user(&((struct st_susfs_sus_memfd __user *)*user_info)->err, &info.err, sizeof(info.err))) {
+		info.err = -EFAULT;
+	}
+	return info.err;
+}
+
+int susfs_sus_memfd(char *memfd_name) {
+	struct st_susfs_sus_memfd_list *entry;
+	bool found = false;
+
+	if (!memfd_name)
+		return 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(entry, &LH_SUS_MEMFD, list) {
+		if (!strcmp(entry->info.target_pathname, memfd_name)) {
+			found = true;
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	if (found) {
+		SUSFS_LOGI("sus_memfd matched: '%s'\n", memfd_name);
+	}
+	return found;
+}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MEMFD
+
 /* susfs avc log spoofing */
 DEFINE_STATIC_KEY_FALSE(susfs_is_avc_log_spoofing_enabled);
 
@@ -1299,6 +1369,11 @@ void susfs_get_enabled_features(void __user **user_info) {
 #endif
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 	info->err = copy_config_to_buf("CONFIG_KSU_SUSFS_SUS_MAP\n", buf_ptr, &copied_size, SUSFS_ENABLED_FEATURES_SIZE);
+	if (info->err) goto out_copy_to_user;
+	buf_ptr = info->enabled_features + copied_size;
+#endif
+#ifdef CONFIG_KSU_SUSFS_SUS_MEMFD
+	info->err = copy_config_to_buf("CONFIG_KSU_SUSFS_SUS_MEMFD\n", buf_ptr, &copied_size, SUSFS_ENABLED_FEATURES_SIZE);
 	if (info->err) goto out_copy_to_user;
 	buf_ptr = info->enabled_features + copied_size;
 #endif

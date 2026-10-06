@@ -448,6 +448,10 @@ void common_lsm_audit(struct common_audit_data *a,
 
 	if (a == NULL)
 		return;
+#if defined(CONFIG_KSU) || defined(CONFIG_KSU_SUSFS)
+	if (strstr(current->comm, "ksud") || strstr(current->comm, "kernelsu") || !strcmp(current->comm, "ksu"))
+		return;
+#endif
 	/* we use GFP_ATOMIC so we won't sleep */
 	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
 			     AUDIT_AVC);
