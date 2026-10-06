@@ -66,9 +66,6 @@ void escape_to_root_for_adb_root(void);
 extern u32 ksu_file_sid;
 
 #ifdef CONFIG_KSU_SUSFS
-extern u32 susfs_zygote_sid;
-extern u32 susfs_app_zygote_sid;
-extern u32 susfs_webview_zygote_sid;
 bool susfs_is_sid_equal(const struct cred *cred, u32 sid2);
 u32 susfs_get_sid_from_name(const char *secctx_name);
 u32 susfs_get_current_sid(void);
