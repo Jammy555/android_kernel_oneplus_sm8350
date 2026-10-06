@@ -100,7 +100,8 @@ static int susfs_statfs_by_dentry(struct dentry *dentry, struct vfsmount *mnt, s
 	retval = security_sb_statfs(dentry);
 	if (retval)
 		return retval;
-	if (!susfs_sus_kstat_spoof_vfs_statfs(d_backing_inode(dentry), buf, is_fuse)) {
+	if (d_backing_inode(dentry) &&
+	    !susfs_sus_kstat_spoof_vfs_statfs(d_backing_inode(dentry), buf, is_fuse)) {
 		if (buf->f_frsize == 0)
 			buf->f_frsize = buf->f_bsize;
 		return retval;

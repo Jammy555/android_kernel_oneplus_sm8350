@@ -36,6 +36,7 @@
 #define CMD_SUSFS_SUS_SU 0x60000 /* deprecated */
 #define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x60010
 #define CMD_SUSFS_ADD_SUS_MAP 0x60020
+#define CMD_SUSFS_ADD_SUS_MEMFD 0x60030
 
 #define SUSFS_MAX_LEN_PATHNAME 256 // 256 should address many paths already unless you are doing some strange experimental stuff, then set your own desired length
 #define SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE 8192 // 8192 is enough I guess
@@ -74,6 +75,7 @@
 #define AS_FLAGS_SUS_KSTAT 35
 #define AS_FLAGS_OPEN_REDIRECT 36
 #define AS_FLAGS_SUS_MAP 39
+#define AS_FLAGS_SUS_MEMFD 40
 
 #define ND_STATE_LOOKUP_LAST 32
 #define ND_STATE_OPEN_LAST 64
@@ -152,7 +154,8 @@ static inline void susfs_clear_current_proc_no_su(void) {
 
 #define SUSFS_IS_INODE_SUS_MAP(inode) \
 		inode && inode->i_mapping && \
-		unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags)) && \
+		unlikely((test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags) || \
+			  test_bit(AS_FLAGS_SUS_MEMFD, &inode->i_mapping->flags))) && \
 		susfs_is_current_proc_umounted_app()
 
 /*
