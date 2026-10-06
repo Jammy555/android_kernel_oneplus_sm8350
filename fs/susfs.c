@@ -619,9 +619,8 @@ out_spoof_kstat:
 
 /* try_umount */
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
-#include "../drivers/staging/ksu/feature/kernel_umount.h"
-
 static DEFINE_SPINLOCK(susfs_spin_lock_try_umount);
+extern void try_umount(const char *mnt, int flags);
 static LIST_HEAD(LH_TRY_UMOUNT_PATH);
 
 struct susfs_umount_tw {
@@ -671,19 +670,11 @@ out_copy_to_user:
 static void susfs_umount_tw_func(struct callback_head *cb) {
 	struct susfs_umount_tw *tw = container_of(cb, struct susfs_umount_tw, cb);
 	struct st_susfs_try_umount_list *cursor = NULL;
-	struct mount_entry *entry = NULL;
 	const struct cred *saved_cred = NULL;
 
 	if (ksu_cred) {
 		saved_cred = override_creds(ksu_cred);
 	}
-
-	down_read(&mount_list_lock);
-	list_for_each_entry(entry, &mount_list, list) {
-		SUSFS_LOGI("umounting ksu entry '%s' flags: 0x%x via task_work\n", entry->umountable, entry->flags);
-		try_umount(entry->umountable, entry->flags);
-	}
-	up_read(&mount_list_lock);
 
 	spin_lock(&susfs_spin_lock_try_umount);
 	// We should umount in reversed order
@@ -703,11 +694,7 @@ static void susfs_umount_tw_func(struct callback_head *cb) {
 void susfs_try_umount(uid_t uid) {
 	struct susfs_umount_tw *tw;
 
-	if (!ksu_cred) {
-		return;
-	}
-
-	if (list_empty(&LH_TRY_UMOUNT_PATH) && list_empty(&mount_list)) {
+	if (list_empty(&LH_TRY_UMOUNT_PATH)) {
 		return;
 	}
 
