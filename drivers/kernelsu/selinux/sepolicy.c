@@ -90,8 +90,7 @@ static bool add_typeattribute(struct policydb *db, const char *type,
 #define symtab_insert(s, name, datum) hashtab_insert((s)->table, name, datum)
 #endif
 
-#define avtab_for_each(avtab, cur)                                             \
-    ksu_hash_for_each(avtab.htable, avtab.nslot, cur);
+#define avtab_for_each(avtab, cur) ksu_hash_for_each(avtab.htable, avtab.nslot, cur)
 
 static struct avtab_node *get_avtab_node(struct policydb *db,
                                          struct avtab_key *key,
@@ -134,9 +133,8 @@ static struct avtab_node *get_avtab_node(struct policydb *db,
         int grow_size = sizeof(struct avtab_key);
         grow_size += sizeof(struct avtab_datum);
         if (key->specified & AVTAB_XPERMS) {
-            grow_size += sizeof(u8);
-            grow_size += sizeof(u8);
-            grow_size += sizeof(u32) * ARRAY_SIZE(avdatum.u.xperms->perms.p);
+            grow_size += sizeof(avdatum.u.xperms->specified) + sizeof(avdatum.u.xperms->driver) +
+                         sizeof(avdatum.u.xperms->perms.p);
         }
         db->len += grow_size;
     }
@@ -159,7 +157,8 @@ static bool remove_avtab_node(struct policydb *db, struct avtab_node *node)
 {
     int i;
     int ret;
-    int shrink_size = sizeof(struct avtab_key) + sizeof(struct avtab_datum);
+    int shrink_size = sizeof(node->key.source_type) + sizeof(node->key.target_type) + sizeof(node->key.target_class) +
+                      sizeof(node->key.specified);
     struct avtab removed = {};
     struct avtab_node *n;
     struct avtab_node *prev;
@@ -193,9 +192,11 @@ static bool remove_avtab_node(struct policydb *db, struct avtab_node *node)
             if (db->te_avtab.nel > 0)
                 db->te_avtab.nel--;
 
-            if ((n->key.specified & AVTAB_XPERMS) && n->datum.u.xperms) {
-                shrink_size += sizeof(u8) + sizeof(u8) + sizeof(u32) * ARRAY_SIZE(n->datum.u.xperms->perms.p);
-            }
+            if (n->key.specified & AVTAB_XPERMS)
+                shrink_size += sizeof(n->datum.u.xperms->specified) + sizeof(n->datum.u.xperms->driver) +
+                               sizeof(n->datum.u.xperms->perms.p);
+            else
+                shrink_size += sizeof(n->datum.u.data);
             n->next = NULL;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
             flex_array_put_ptr(removed.htable, 0, n, GFP_KERNEL | __GFP_ZERO);
@@ -441,6 +442,10 @@ static void add_xperm_rule_raw(struct policydb *db, struct type_datum *src,
             }
             memcpy(datum->u.xperms, &xperms, sizeof(xperms));
         }
+
+        // Allow updating permission bits of existing xperms
+        for (i = 0; i < ARRAY_SIZE(xperms.perms.p); i++)
+            datum->u.xperms->perms.p[i] |= xperms.perms.p[i];
     }
 }
 
