@@ -635,6 +635,15 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 	if (!prtd || !prtd->mmap_flag)
 		return -EIO;
 
+	/*
+	 * These streams are started before any data is written, which
+	 * snd_pcm_pre_start() only allows when stop_threshold >= boundary.
+	 * Userspace asks for that with INT_MAX, which is above the boundary of
+	 * a 32-bit client but far below the one of a 64-bit client.
+	 */
+	if (runtime->stop_threshold >= INT_MAX)
+		runtime->stop_threshold = runtime->boundary;
+
 	if (prtd->audio_client) {
 		rc = q6asm_set_softvolume_v2(prtd->audio_client,
 						&softvol, SOFT_VOLUME_INSTANCE_1);
