@@ -7142,7 +7142,12 @@ static int __init fastrpc_device_init(void)
 	VERIFY(err, !IS_ERR(me->class));
 	if (err)
 		goto class_create_bail;
-	me->compat = (fops.compat_ioctl == NULL) ? 0 : 1;
+	/*
+	 * "compat" selects the 64-bit forms of the mmap/munmap messages to the
+	 * DSP, which a 64-bit kernel needs whether or not it also serves 32-bit
+	 * clients; the compat ioctl is absent without CONFIG_COMPAT.
+	 */
+	me->compat = IS_ENABLED(CONFIG_64BIT);
 
 	/*
 	 * Create devices and register with sysfs
