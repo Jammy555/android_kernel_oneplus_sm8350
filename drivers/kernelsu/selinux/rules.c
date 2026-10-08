@@ -129,6 +129,7 @@ static int apply_kernelsu_rules_fn(void *ptr)
     ksu_allow(db, "kernel", "shell_data_file", "file", ALL);
     // we need to read /data/system/packages.list
     ksu_allow(db, "kernel", "kernel", "capability", "dac_override");
+    ksu_allow(db, "kernel", "kernel", "capability", "dac_read_search");
     // Android 10+:
     // http://aospxref.com/android-12.0.0_r3/xref/system/sepolicy/private/file_contexts#512
     ksu_allow(db, "kernel", "packages_list_file", "file", ALL);
