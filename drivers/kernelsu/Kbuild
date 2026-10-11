@@ -70,7 +70,7 @@ obj-$(CONFIG_KSU) += kernelsu.o
 LPATH := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin
 MDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-KSU_GIT_VERSION := 3013
+KSU_GIT_VERSION := 3017
 KSU_GIT_TAG := v3.4.0-legacy
 KSU_GIT_VERSION_VALID := 1
 
