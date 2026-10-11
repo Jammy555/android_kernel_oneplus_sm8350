@@ -229,7 +229,13 @@ static struct kprobe *slow_avc_audit_kp;
 
 static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
+	// tsid is the third argument while slow_avc_audit() takes a
+	// struct selinux_state first, see the same split in extras.c
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
 	u32 *tsid = (u32 *)&PT_REGS_PARM2(regs);
+#else
+	u32 *tsid = (u32 *)&PT_REGS_PARM3(regs);
+#endif
 
 	ksu_slow_avc_audit(tsid);
 
