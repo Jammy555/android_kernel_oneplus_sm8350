@@ -209,9 +209,15 @@ void apply_kernelsu_rules()
 	}
 
 #ifdef SELINUX_POLICY_INSTEAD_SELINUX_SS
-	struct selinux_policy *pol, *old_pol = selinux_state.policy;
+	struct selinux_policy *pol, *old_pol;
 	mutex_lock(&selinux_state.policy_mutex);
-	pol = ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
+	old_pol = rcu_dereference_protected(selinux_state.policy,
+					    lockdep_is_held(&selinux_state.policy_mutex));
+	if (!old_pol) {
+		pr_err("selinux policy is NULL, skipping rules application\n");
+		goto out_unlock;
+	}
+	pol = ksu_dup_sepolicy(old_pol);
 	if (!pol) {
 		pr_err("failed to dup selinux_policy\n");
 		goto out_unlock;
@@ -600,10 +606,13 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	}
 
 	mutex_lock(&selinux_state.policy_mutex);
-
-	old_pol = selinux_state.policy;
-	pol = ksu_dup_sepolicy(rcu_dereference_protected(
-		old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
+	old_pol = rcu_dereference_protected(selinux_state.policy,
+					    lockdep_is_held(&selinux_state.policy_mutex));
+	if (!old_pol) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
+	pol = ksu_dup_sepolicy(old_pol);
 	if (!pol) {
 		ret = -ENOMEM;
 		goto out_unlock;
