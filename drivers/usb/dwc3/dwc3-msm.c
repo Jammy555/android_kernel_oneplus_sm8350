@@ -6009,8 +6009,30 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	 */
 	if (!dwc->ignore_wakeup_src_in_hostmode || !mdwc->in_host_mode) {
 		if (!atomic_read(&dwc->in_lpm)) {
-			dev_err(mdwc->dev, "Abort PM suspend!! (USB is outside LPM)\n");
-			return -EBUSY;
+			int retry_ret;
+
+			dev_dbg(mdwc->dev, "USB outside LPM, attempting forced LPM\n");
+			retry_ret = pm_runtime_put_sync_suspend(mdwc->dev);
+			if (retry_ret < 0 || !atomic_read(&dwc->in_lpm)) {
+				dev_warn(mdwc->dev,
+					"USB forced LPM failed (%d), allowing suspend anyway\n",
+					retry_ret);
+			}
+		}
+
+		/*
+		 * Release USB wakeup source so it does not block system suspend.
+		 * This mirrors what dwc3_msm_suspend() does at the end of its
+		 * LPM path via pm_relax().
+		 */
+		if (!mdwc->in_restart) {
+			if (mdwc->lpm_to_suspend_delay) {
+				dev_dbg(mdwc->dev, "defer suspend with %d(msecs)\n",
+						mdwc->lpm_to_suspend_delay);
+				pm_wakeup_event(mdwc->dev, mdwc->lpm_to_suspend_delay);
+			} else {
+				pm_relax(mdwc->dev);
+			}
 		}
 
 		atomic_set(&mdwc->pm_suspended, 1);
