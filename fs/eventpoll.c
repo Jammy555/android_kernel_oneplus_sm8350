@@ -1459,6 +1459,7 @@ static int ep_create_wakeup_source(struct epitem *epi)
 {
 	struct name_snapshot n;
 	struct wakeup_source *ws;
+	char ws_name[64];
 
 	if (!epi->ep->ws) {
 		epi->ep->ws = wakeup_source_register(NULL, "eventpoll");
@@ -1467,7 +1468,11 @@ static int ep_create_wakeup_source(struct epitem *epi)
 	}
 
 	take_dentry_name_snapshot(&n, epi->ffd.file->f_path.dentry);
-	ws = wakeup_source_register(NULL, n.name.name);
+	if (!strcmp(n.name.name, "[timerfd]"))
+		snprintf(ws_name, sizeof(ws_name), "[timerfd:%s:%d]", current->comm, epi->ffd.fd);
+	else
+		snprintf(ws_name, sizeof(ws_name), "%s", n.name.name);
+	ws = wakeup_source_register(NULL, ws_name);
 	release_dentry_name_snapshot(&n);
 
 	if (!ws)
