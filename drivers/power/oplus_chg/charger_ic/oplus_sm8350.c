@@ -872,12 +872,15 @@ static void oplus_connector_temp_check_work(struct work_struct *work)
 
 	oplus_chg_vbus_status(bcdev, &bcdev->vbus_present);
 	if (!bcdev->vbus_present) {
-		if (!check_pass && count --) {
+		if (!check_pass && count > 0) {
+			count--;
 			schedule_delayed_work(&bcdev->connector_check_work,
 				msecs_to_jiffies(1500));
 			pr_err("Vbus not ready when protect algorithm runs, retry!! count: %d", count);
-		} else
+		} else {
+			count = 5;
 			pr_err("Vbus not present, return!!");
+		}
 		check_pass = false;
 		return;
 	}
@@ -1423,6 +1426,7 @@ static void handle_notification(struct battery_chg_dev *bcdev, void *data,
 	case BC_USB_STATUS_OFFLINE:
 		bcdev->count_run = 0;
 		usb_online = false;
+		cancel_delayed_work(&bcdev->connector_check_work);
 		chip->svid_verified = false;
 		chip->usb_enum_status = false;
 		if (is_usb_ocm_available(bcdev))
