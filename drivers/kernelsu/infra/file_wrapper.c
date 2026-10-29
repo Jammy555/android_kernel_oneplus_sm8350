@@ -104,7 +104,7 @@ static int ksu_wrapper_iopoll(struct kiocb *kiocb, bool spin) {
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
 static int ksu_wrapper_iterate (struct file *fp, struct dir_context *dc) {
 	struct ksu_file_wrapper* data = fp->private_data;
 	struct file* orig = data->orig;
@@ -371,7 +371,7 @@ static struct ksu_file_wrapper* ksu_create_file_wrapper(struct file* fp) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 	p->ops.iopoll = fp->f_op->iopoll ? ksu_wrapper_iopoll : NULL;
 #endif
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
 	p->ops.iterate = fp->f_op->iterate ? ksu_wrapper_iterate : NULL;
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
