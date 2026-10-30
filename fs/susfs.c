@@ -47,9 +47,11 @@ DEFINE_STATIC_KEY_FALSE(susfs_is_log_enabled);
 
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#define SUSFS_MAX_PATH_LOOP_ENTRIES 256
 DEFINE_STATIC_SRCU(susfs_srcu_sus_path_loop);
 static DEFINE_MUTEX(susfs_mutex_lock_sus_path);
 static LIST_HEAD(LH_SUS_PATH_LOOP);
+static unsigned int susfs_sus_path_loop_count = 0;
 const struct qstr susfs_fake_qstr_name = QSTR_INIT("..5.u.S", 7); // used to re-test the dcache lookup, make sure you don't have file named like this!!
 
 void susfs_add_sus_path(void __user **user_info) {
@@ -139,7 +141,14 @@ void susfs_add_sus_path_loop(void __user **user_info) {
 			}
 		}
 	}
+	if (susfs_sus_path_loop_count >= SUSFS_MAX_PATH_LOOP_ENTRIES) {
+		mutex_unlock(&susfs_mutex_lock_sus_path);
+		kfree(new_list);
+		info.err = -ENOSPC;
+		goto out_copy_to_user;
+	}
 	list_add_tail_rcu(&new_list->list, &LH_SUS_PATH_LOOP);
+	susfs_sus_path_loop_count++;
 	mutex_unlock(&susfs_mutex_lock_sus_path);
 	SUSFS_LOGI("target_pathname: '%s', is successfully added to LH_SUS_PATH_LOOP\n", new_list->target_pathname);
 	info.err = 0;
@@ -416,7 +425,7 @@ void susfs_add_sus_kstat(void __user **user_info) {
 					new_entry->info.spoofed_atime_tv_nsec, new_entry->info.spoofed_mtime_tv_nsec, new_entry->info.spoofed_ctime_tv_nsec,
 					new_entry->info.spoofed_blksize, new_entry->info.spoofed_blocks, new_entry->spoofed_mnt_id);
 #else
-			SUSFS_LOGI("is_fuse: %d, is_statically: '%d', target_ino: '%lu', target_dev: '%lu', target_pathname: '%s', spoofed_ino: '%lu', spoofed_dev: '%lu', spoofed_nlink: '%u', spoofed_size: '%u', spoofed_atime_tv_sec: '%ld', spoofed_mtime_tv_sec: '%ld', spoofed_ctime_tv_sec: '%ld', spoofed_atime_tv_nsec: '%ld', spoofed_mtime_tv_nsec: '%ld', spoofed_ctime_tv_nsec: '%ld', spoofed_blksize: '%lu', spoofed_blocks: '%llu', spoofed_mnt_id: '%d', is successfully added to SUS_KSTAT_HLIST\n",
+			SUSFS_LOGI("is_fuse: %d, is_statically: '%d', target_ino: '%lu', target_dev: '%lu', target_pathname: '%s', spoofed_ino: '%lu', spoofed_dev: '%lu', spoofed_nlink: '%u', spoofed_size: '%lld', spoofed_atime_tv_sec: '%ld', spoofed_mtime_tv_sec: '%ld', spoofed_ctime_tv_sec: '%ld', spoofed_atime_tv_nsec: '%ld', spoofed_mtime_tv_nsec: '%ld', spoofed_ctime_tv_nsec: '%ld', spoofed_blksize: '%lu', spoofed_blocks: '%llu', spoofed_mnt_id: '%d', is successfully added to SUS_KSTAT_HLIST\n",
 					new_entry->is_fuse,
 					new_entry->info.is_statically, new_entry->info.target_ino,
 					new_entry->target_dev, new_entry->info.target_pathname,
@@ -455,7 +464,7 @@ void susfs_add_sus_kstat(void __user **user_info) {
 			new_entry->info.spoofed_atime_tv_nsec, new_entry->info.spoofed_mtime_tv_nsec, new_entry->info.spoofed_ctime_tv_nsec,
 			new_entry->info.spoofed_blksize, new_entry->info.spoofed_blocks, new_entry->spoofed_mnt_id);
 #else
-	SUSFS_LOGI("is_fuse: %d, is_statically: '%d', target_ino: '%lu', target_dev: '%lu', target_pathname: '%s', spoofed_ino: '%lu', spoofed_dev: '%lu', spoofed_nlink: '%u', spoofed_size: '%u', spoofed_atime_tv_sec: '%ld', spoofed_mtime_tv_sec: '%ld', spoofed_ctime_tv_sec: '%ld', spoofed_atime_tv_nsec: '%ld', spoofed_mtime_tv_nsec: '%ld', spoofed_ctime_tv_nsec: '%ld', spoofed_blksize: '%lu', spoofed_blocks: '%llu', spoofed_mnt_id: '%d', is successfully added to SUS_KSTAT_HLIST\n",
+	SUSFS_LOGI("is_fuse: %d, is_statically: '%d', target_ino: '%lu', target_dev: '%lu', target_pathname: '%s', spoofed_ino: '%lu', spoofed_dev: '%lu', spoofed_nlink: '%u', spoofed_size: '%lld', spoofed_atime_tv_sec: '%ld', spoofed_mtime_tv_sec: '%ld', spoofed_ctime_tv_sec: '%ld', spoofed_atime_tv_nsec: '%ld', spoofed_mtime_tv_nsec: '%ld', spoofed_ctime_tv_nsec: '%ld', spoofed_blksize: '%lu', spoofed_blocks: '%llu', spoofed_mnt_id: '%d', is successfully added to SUS_KSTAT_HLIST\n",
 			new_entry->is_fuse,
 			new_entry->info.is_statically, new_entry->info.target_ino,
 			new_entry->target_dev, new_entry->info.target_pathname,
@@ -1243,12 +1252,6 @@ int susfs_add_sus_memfd(void __user **user_info) {
 	strscpy(new_entry->info.target_pathname, info.target_pathname, SUSFS_MAX_LEN_PATHNAME);
 
 	spin_lock_irqsave(&susfs_spin_lock_sus_memfd, flags);
-	if (susfs_memfd_count >= SUSFS_MAX_MEMFD_ENTRIES) {
-		spin_unlock_irqrestore(&susfs_spin_lock_sus_memfd, flags);
-		kfree(new_entry);
-		info.err = -ENOSPC;
-		goto out_copy_to_user;
-	}
 	{
 		struct st_susfs_sus_memfd_list *cursor;
 		list_for_each_entry(cursor, &LH_SUS_MEMFD, list) {
@@ -1259,6 +1262,12 @@ int susfs_add_sus_memfd(void __user **user_info) {
 				goto out_copy_to_user;
 			}
 		}
+	}
+	if (susfs_memfd_count >= SUSFS_MAX_MEMFD_ENTRIES) {
+		spin_unlock_irqrestore(&susfs_spin_lock_sus_memfd, flags);
+		kfree(new_entry);
+		info.err = -ENOSPC;
+		goto out_copy_to_user;
 	}
 	list_add_tail_rcu(&new_entry->list, &LH_SUS_MEMFD);
 	susfs_memfd_count++;
