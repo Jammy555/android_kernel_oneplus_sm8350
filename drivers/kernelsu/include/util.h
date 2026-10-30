@@ -93,7 +93,7 @@ static inline long ksu_sys_unshare(unsigned long flags)
 
 #endif
 
-static void __user *userspace_stack_buffer(const void *d, size_t len)
+static inline void __user *userspace_stack_buffer(const void *d, size_t len)
 {
 	// Stack Pointer must be 16-byte aligned.
 	// We also subtract a safe margin (256 bytes)
