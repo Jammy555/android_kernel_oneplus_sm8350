@@ -203,6 +203,7 @@ static struct bluetooth_power_platform_data *bt_power_pdata;
 static struct platform_device *btpdev;
 static bool previous;
 static int pwr_state;
+static bool bt_powered;
 static struct class *bt_class;
 static int bt_major;
 static int soc_id;
@@ -570,6 +571,16 @@ static int bluetooth_power(int on)
 
 	pr_debug("%s: on: %d\n", __func__, on);
 
+	/*
+	 * The rfkill switch and the BT_CMD_PWR_CTRL ioctl keep separate state,
+	 * so either can ask for power-on while the other already has the chip
+	 * running. Toggling BT_EN then would reset the chip under its owner.
+	 */
+	if (on == 1 && bt_powered) {
+		pr_info("%s: BT chip already powered on\n", __func__);
+		return 0;
+	}
+
 	if (on == 1) {
 		rc = bt_power_vreg_set(BT_POWER_ENABLE);
 		if (rc < 0) {
@@ -600,6 +611,7 @@ static int bluetooth_power(int on)
 				goto gpio_fail;
 			}
 		}
+		bt_powered = true;
 	} else if (on == 0) {
 		// Power Off
 		if (bt_power_pdata->bt_gpio_sys_rst > 0)
@@ -614,6 +626,7 @@ gpio_fail:
 clk_fail:
 regulator_fail:
 		bt_power_vreg_set(BT_POWER_DISABLE);
+		bt_powered = false;
 	} else if (on == 2) {
 		/* Retention mode */
 		bt_power_vreg_set(BT_POWER_RETENTION);
