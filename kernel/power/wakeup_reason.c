@@ -27,6 +27,7 @@
 #include <linux/notifier.h>
 #include <linux/suspend.h>
 #include <linux/slab.h>
+#include <linux/timekeeping.h>
 
 /*
  * struct wakeup_irq_node - stores data and relationships for IRQs logged as
@@ -378,15 +379,14 @@ static int wakeup_reason_pm_event(struct notifier_block *notifier,
 	case PM_SUSPEND_PREPARE:
 		/* monotonic time since boot */
 		last_monotime = ktime_get();
-		/* monotonic time since boot including the time spent in suspend */
-		last_stime = ktime_get_boottime();
+		/* Use the same instant for both clocks to avoid sampling skew. */
+		last_stime = ktime_mono_to_any(last_monotime, TK_OFFS_BOOT);
 		clear_wakeup_reasons();
 		break;
 	case PM_POST_SUSPEND:
 		/* monotonic time since boot */
 		curr_monotime = ktime_get();
-		/* monotonic time since boot including the time spent in suspend */
-		curr_stime = ktime_get_boottime();
+		curr_stime = ktime_mono_to_any(curr_monotime, TK_OFFS_BOOT);
 		print_wakeup_sources();
 		break;
 	default:
