@@ -452,6 +452,11 @@ static int battery_psy_get_prop(struct power_supply *psy,
 		rc = oplus_chg_mod_get_property(ogdev->batt_ocm,
 			OPLUS_CHG_PROP_CURRENT_NOW,
 			(union oplus_chg_mod_propval *)pval);
+#ifndef CONFIG_OPLUS_CHG_OOS
+		/* Internal charger clients use mA; power_supply exposes uA. */
+		if (!rc)
+			pval->intval *= 1000;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		rc = oplus_chg_mod_get_property(ogdev->batt_ocm,
