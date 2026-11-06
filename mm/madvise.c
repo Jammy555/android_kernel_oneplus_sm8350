@@ -1236,9 +1236,9 @@ static int do_process_madvise(struct task_struct *target_task,
 	return ret;
 }
 
-SYSCALL_DEFINE6(process_madvise, int, which, pid_t, upid,
+SYSCALL_DEFINE5(process_madvise, int, pidfd,
 		const struct iovec __user *, vec, unsigned long, vlen,
-		int, behavior, unsigned long, flags)
+		int, behavior, unsigned int, flags)
 {
 	ssize_t ret;
 	struct pid *pid;
@@ -1251,26 +1251,9 @@ SYSCALL_DEFINE6(process_madvise, int, which, pid_t, upid,
 	if (flags != 0)
 		return -EINVAL;
 
-	switch (which) {
-	case P_PID:
-		if (upid <= 0)
-			return -EINVAL;
-
-		pid = find_get_pid(upid);
-		if (!pid)
-			return -ESRCH;
-		break;
-	case P_PIDFD:
-		if (upid < 0)
-			return -EINVAL;
-
-		pid = pidfd_get_pid(upid);
-		if (IS_ERR(pid))
-			return PTR_ERR(pid);
-		break;
-	default:
-		return -EINVAL;
-	}
+	pid = pidfd_get_pid(pidfd);
+	if (IS_ERR(pid))
+		return PTR_ERR(pid);
 
 	task = get_pid_task(pid, PIDTYPE_PID);
 	if (!task) {
