@@ -153,10 +153,10 @@ static inline void susfs_clear_current_proc_no_su(void) {
 }
 
 #define SUSFS_IS_INODE_SUS_MAP(inode) \
-		inode && inode->i_mapping && \
-		unlikely((test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags) || \
-			  test_bit(AS_FLAGS_SUS_MEMFD, &inode->i_mapping->flags))) && \
-		susfs_is_current_proc_umounted_app()
+		((inode) && (inode)->i_mapping && \
+		unlikely((test_bit(AS_FLAGS_SUS_MAP, &(inode)->i_mapping->flags) || \
+			  test_bit(AS_FLAGS_SUS_MEMFD, &(inode)->i_mapping->flags))) && \
+		susfs_is_current_proc_umounted_app())
 
 /*
  * Auto-hide, no per-file registration needed: any mapped file whose last
@@ -176,11 +176,11 @@ static inline void susfs_clear_current_proc_no_su(void) {
 		 strstr((dentry)->d_name.name, SUSFS_ROM_TELL_NEEDLE))
 
 #define SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(inode) \
-		inode && inode->i_mapping && \
-		unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_mapping->flags))
+		((inode) && (inode)->i_mapping && \
+		unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &(inode)->i_mapping->flags)))
 
 #define SUSFS_IS_INODE_OPEN_REDIRECT(inode) \
-		inode && inode->i_mapping && \
-		unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_mapping->flags)) && \
-		susfs_is_current_proc_umounted_app()
+		((inode) && (inode)->i_mapping && \
+		unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &(inode)->i_mapping->flags)) && \
+		susfs_is_current_proc_umounted_app())
 #endif // #ifndef KSU_SUSFS_DEF_H
