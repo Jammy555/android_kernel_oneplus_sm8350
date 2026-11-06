@@ -93,7 +93,9 @@ int nuke_ext4_sysfs(const char *mnt)
 		return -EINVAL;
 	}
 
+	down_write(&sb->s_umount);
 	ext4_unregister_sysfs(sb);
+	up_write(&sb->s_umount);
 	path_put(&path);
 	return 0;
 }

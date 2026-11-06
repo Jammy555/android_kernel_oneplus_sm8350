@@ -449,9 +449,13 @@ void ext4_unregister_sysfs(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
-	if (sbi->s_proc)
+	if (sbi->s_proc) {
 		remove_proc_subtree(sb->s_id, ext4_proc_root);
-	kobject_del(&sbi->s_kobj);
+		sbi->s_proc = NULL;
+	}
+	/* KernelSU can remove these entries before the filesystem unmounts. */
+	if (sbi->s_kobj.state_in_sysfs)
+		kobject_del(&sbi->s_kobj);
 }
 
 int __init ext4_init_sysfs(void)
