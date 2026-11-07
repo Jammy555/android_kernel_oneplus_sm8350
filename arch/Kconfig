@@ -653,6 +653,18 @@ config CFI_PERMISSIVE
 	  warning instead of a kernel panic. This option is useful for finding
 	  CFI violations during development.
 
+config PGO_CLANG_USE
+	bool "Optimize the kernel with a clang PGO profile"
+	depends on CC_IS_CLANG
+	help
+	  Build with -fprofile-use=kernel/pgo/vmlinux.profdata, an indexed
+	  profile made by llvm-profdata merge from raw profiles of a kernel
+	  built with -fprofile-generate. The profile must come from the same
+	  clang version and the same source path as this build; functions
+	  that changed since it was taken are built without profile data.
+
+	  If unsure, say N.
+
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool
 	help

@@ -1088,6 +1088,14 @@ KBUILD_CFLAGS	+= $(CC_FLAGS_CFI)
 export CC_FLAGS_CFI
 endif
 
+# Functions with no profile, or changed since it was taken, are compiled
+# as if there were none; that is expected, so don't warn about it.
+ifdef CONFIG_PGO_CLANG_USE
+KBUILD_CFLAGS += -fprofile-use=$(abs_srctree)/kernel/pgo/vmlinux.profdata \
+	-Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date \
+	-Wno-profile-instr-missing
+endif
+
 # arch Makefile may override CC so keep this after arch Makefile is included
 NOSTDINC_FLAGS += -nostdinc -isystem $(shell $(CC) -print-file-name=include)
 
