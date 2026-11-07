@@ -3,6 +3,7 @@
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/kprofiles.h>
 #include <linux/devfreq_cooling.h>
 #include <linux/slab.h>
 
@@ -303,7 +304,7 @@ int kgsl_devfreq_target(struct device *dev, unsigned long *freq, u32 flags)
 		 * The GPU is about to get suspended,
 		 * but it needs to be at the max power level when waking up
 		 */
-		pwr->wakeup_maxpwrlevel = 1;
+		pwr->wakeup_maxpwrlevel = kp_active_mode() != 1;
 		return 0;
 	}
 

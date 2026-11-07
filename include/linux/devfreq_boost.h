@@ -16,6 +16,7 @@ enum df_device {
 void devfreq_boost_kick(enum df_device device);
 void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms);
 void devfreq_register_boost_device(enum df_device device, struct devfreq *df);
+void devfreq_unregister_boost_device(struct devfreq *df);
 #else
 static inline
 void devfreq_boost_kick(enum df_device device)
@@ -29,6 +30,7 @@ static inline
 void devfreq_register_boost_device(enum df_device device, struct devfreq *df)
 {
 }
+static inline void devfreq_unregister_boost_device(struct devfreq *df) {}
 #endif
 
 #endif /* _DEVFREQ_BOOST_H_ */

@@ -742,58 +742,64 @@ static ssize_t show_scaling_cur_freq(struct cpufreq_policy *policy, char *buf)
 	return ret;
 }
 
-extern int kp_active_mode(void);
-
-/**
- * cpufreq_per_cpu_attr_write() / store_##file_name() - sysfs write access
- */
-#define store_one(file_name, object)					\
-static ssize_t store_##file_name					\
-(struct cpufreq_policy *policy, const char *buf, size_t count)		\
-{									\
-	unsigned long val;						\
-	int ret;							\
-									\
-	ret = sscanf(buf, "%lu", &val);					\
-	if (ret != 1)							\
-		return -EINVAL;						\
-									\
-	if (kp_active_mode() == 1) {					\
-		if (&policy->object == &policy->max) {				\
-			extern int kp_max_freq_ratio(void);			\
-			unsigned long ratio = kp_max_freq_ratio();		\
-			unsigned long kp_ceil = (policy->cpuinfo.max_freq * ratio) / 100;\
-			/* Snap kp_ceil down to nearest valid OPP step */	\
-			if (policy->freq_table) {				\
-				struct cpufreq_frequency_table *pos;		\
-				unsigned long best = 0;				\
-				cpufreq_for_each_valid_entry(pos, policy->freq_table) {\
-					if (pos->frequency <= kp_ceil &&		\
-					    pos->frequency > best)		\
-						best = pos->frequency;		\
-				}						\
-				if (best > 0) kp_ceil = best;			\
-			}							\
-			if (val > kp_ceil)					\
-				val = kp_ceil;					\
-		}								\
-		if (&policy->object == &policy->min) {				\
-			unsigned long kp_min = policy->cpuinfo.min_freq;	\
-			if (val > kp_min)					\
-				val = kp_min;					\
-		}								\
-	}									\
-									\
-	if (&policy->object == &policy->max)				\
-		if (val < policy->min)					\
-			val = policy->min;				\
-									\
-	ret = freq_qos_update_request(policy->object##_freq_req, val);	\
-	return ret >= 0 ? count : ret;					\
+#define store_one(file_name, object) \
+static ssize_t store_##file_name(struct cpufreq_policy *policy, \
+				const char *buf, size_t count) \
+{ \
+	unsigned int val; \
+	int ret = kstrtouint(buf, 10, &val); \
+	if (ret) \
+		return ret; \
+	ret = freq_qos_update_request(policy->object##_freq_req, val); \
+	return ret >= 0 ? count : ret; \
 }
 
 store_one(scaling_min_freq, min);
 store_one(scaling_max_freq, max);
+
+/* Keep profile requests separate from Power HAL and thermal constraints. */
+static ssize_t store_profile_freq(struct cpufreq_policy *policy,
+		const char *buf, size_t count, enum freq_qos_req_type type)
+{
+	struct freq_qos_request *req;
+	unsigned int value;
+	int ret = kstrtouint(buf, 10, &value);
+
+	if (ret)
+		return ret;
+	if (value && (value < policy->cpuinfo.min_freq ||
+		      value > policy->cpuinfo.max_freq))
+		return -EINVAL;
+	if (type == FREQ_QOS_MIN) {
+		req = &policy->profile_min_freq_req;
+		if (value > READ_ONCE(policy->profile_max_freq_req.pnode.prio))
+			return -EINVAL;
+		value = value ?: FREQ_QOS_MIN_DEFAULT_VALUE;
+	} else {
+		req = &policy->profile_max_freq_req;
+		if (value && value < READ_ONCE(policy->profile_min_freq_req.pnode.prio))
+			return -EINVAL;
+		value = value ?: FREQ_QOS_MAX_DEFAULT_VALUE;
+	}
+	ret = freq_qos_update_request(req, value);
+	return ret < 0 ? ret : count;
+}
+
+#define profile_freq_attr(object, type, default_value) \
+static ssize_t show_scaling_profile_##object##_freq( \
+		struct cpufreq_policy *policy, char *buf) \
+{ \
+	int value = READ_ONCE(policy->profile_##object##_freq_req.pnode.prio); \
+	return sprintf(buf, "%u\n", value == default_value ? 0 : value); \
+} \
+static ssize_t store_scaling_profile_##object##_freq( \
+		struct cpufreq_policy *policy, const char *buf, size_t count) \
+{ \
+	return store_profile_freq(policy, buf, count, type); \
+}
+
+profile_freq_attr(min, FREQ_QOS_MIN, FREQ_QOS_MIN_DEFAULT_VALUE);
+profile_freq_attr(max, FREQ_QOS_MAX, FREQ_QOS_MAX_DEFAULT_VALUE);
 
 /**
  * show_cpuinfo_cur_freq - current CPU frequency as detected by hardware
@@ -981,6 +987,8 @@ cpufreq_freq_attr_ro(related_cpus);
 cpufreq_freq_attr_ro(affected_cpus);
 cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
+cpufreq_freq_attr_rw(scaling_profile_min_freq);
+cpufreq_freq_attr_rw(scaling_profile_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
 
@@ -990,6 +998,8 @@ static struct attribute *default_attrs[] = {
 	&cpuinfo_transition_latency.attr,
 	&scaling_min_freq.attr,
 	&scaling_max_freq.attr,
+	&scaling_profile_min_freq.attr,
+	&scaling_profile_max_freq.attr,
 	&affected_cpus.attr,
 	&related_cpus.attr,
 	&scaling_governor.attr,
@@ -1371,6 +1381,13 @@ static void cpufreq_policy_free(struct cpufreq_policy *policy)
 	kfree(policy->min_freq_req);
 
 	cpufreq_policy_put_kobj(policy);
+	/* Keep embedded requests valid until sysfs and boost users release the policy. */
+	if (freq_qos_request_active(&policy->profile_min_freq_req))
+		freq_qos_remove_request(&policy->profile_min_freq_req);
+	if (freq_qos_request_active(&policy->profile_max_freq_req))
+		freq_qos_remove_request(&policy->profile_max_freq_req);
+	if (freq_qos_request_active(&policy->input_boost_freq_req))
+		freq_qos_remove_request(&policy->input_boost_freq_req);
 	free_cpumask_var(policy->real_cpus);
 	free_cpumask_var(policy->related_cpus);
 	free_cpumask_var(policy->cpus);
@@ -1474,6 +1491,22 @@ static int cpufreq_online(unsigned int cpu)
 			policy->min_freq_req = NULL;
 			goto out_destroy_policy;
 		}
+
+		ret = freq_qos_add_request(&policy->constraints,
+				&policy->profile_min_freq_req, FREQ_QOS_MIN,
+				FREQ_QOS_MIN_DEFAULT_VALUE);
+		if (ret < 0)
+			goto out_destroy_policy;
+		ret = freq_qos_add_request(&policy->constraints,
+				&policy->profile_max_freq_req, FREQ_QOS_MAX,
+				FREQ_QOS_MAX_DEFAULT_VALUE);
+		if (ret < 0)
+			goto out_destroy_policy;
+		ret = freq_qos_add_request(&policy->constraints,
+				&policy->input_boost_freq_req, FREQ_QOS_MIN,
+				FREQ_QOS_MIN_DEFAULT_VALUE);
+		if (ret < 0)
+			goto out_destroy_policy;
 
 		/*
 		 * This must be initialized right here to avoid calling

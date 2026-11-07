@@ -366,6 +366,10 @@ int update_devfreq(struct devfreq *devfreq)
 	 */
 	max_freq = min(devfreq->scaling_max_freq, devfreq->max_freq);
 	min_freq = max(devfreq->scaling_min_freq, devfreq->min_freq);
+	min_freq = max(min_freq, devfreq->boost_min_freq);
+	min_freq = max(min_freq, devfreq->profile_min_freq);
+	if (devfreq->profile_max_freq)
+		max_freq = min(max_freq, devfreq->profile_max_freq);
 
 	if (freq < min_freq) {
 		freq = min_freq;
@@ -1316,10 +1320,6 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	unsigned long value;
 	int ret;
 
-	/* Minfreq is managed by devfreq_boost */
-	if (df->is_boost_device)
-		return count;
-
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
@@ -1407,6 +1407,71 @@ static ssize_t max_freq_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(max_freq);
 
+/* Zero releases a profile limit; HAL and thermal requests keep their own state. */
+static ssize_t profile_freq_store(struct devfreq *df, const char *buf,
+				 size_t count, bool minimum)
+{
+	unsigned long value, old, lowest = ULONG_MAX, highest = 0;
+	unsigned long *request;
+	unsigned int i;
+	int ret = kstrtoul(buf, 10, &value);
+
+	if (ret)
+		return ret;
+	event_mutex_lock(df);
+	mutex_lock(&df->lock);
+	for (i = 0; i < df->profile->max_state; i++) {
+		unsigned long freq = df->profile->freq_table[i];
+
+		if (!freq)
+			continue;
+		lowest = min(lowest, freq);
+		highest = max(highest, freq);
+	}
+	if (value && highest && (value < lowest || value > highest)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (minimum) {
+		request = &df->profile_min_freq;
+		if (df->profile_max_freq && value > df->profile_max_freq) {
+			ret = -EINVAL;
+			goto out;
+		}
+	} else {
+		request = &df->profile_max_freq;
+		if (value && value < df->profile_min_freq) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+	old = *request;
+	*request = value;
+	ret = update_devfreq(df);
+	if (ret)
+		*request = old;
+out:
+	mutex_unlock(&df->lock);
+	event_mutex_unlock(df);
+	return ret < 0 ? ret : count;
+}
+
+#define profile_freq_attr(member, minimum) \
+static ssize_t member##_show(struct device *dev, \
+		struct device_attribute *attr, char *buf) \
+{ \
+	return sprintf(buf, "%lu\n", READ_ONCE(to_devfreq(dev)->member)); \
+} \
+static ssize_t member##_store(struct device *dev, \
+		struct device_attribute *attr, const char *buf, size_t count) \
+{ \
+	return profile_freq_store(to_devfreq(dev), buf, count, minimum); \
+} \
+static DEVICE_ATTR_RW(member)
+
+profile_freq_attr(profile_min_freq, true);
+profile_freq_attr(profile_max_freq, false);
+
 static ssize_t available_frequencies_show(struct device *d,
 					  struct device_attribute *attr,
 					  char *buf)
@@ -1490,6 +1555,8 @@ static struct attribute *devfreq_attrs[] = {
 	&dev_attr_target_freq.attr,
 	&dev_attr_polling_interval.attr,
 	&dev_attr_min_freq.attr,
+	&dev_attr_profile_min_freq.attr,
+	&dev_attr_profile_max_freq.attr,
 	&dev_attr_max_freq.attr,
 	&dev_attr_trans_stat.attr,
 	NULL,

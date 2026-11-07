@@ -3,6 +3,7 @@
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/kprofiles.h>
 #include <linux/interconnect.h>
 #include <linux/msm_kgsl.h>
 #include <linux/of_device.h>
@@ -1744,12 +1745,12 @@ static int kgsl_pwrctrl_enable(struct kgsl_device *device)
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int level, status;
 
-	if (pwr->wakeup_maxpwrlevel) {
+	if (pwr->wakeup_maxpwrlevel && kp_active_mode() != 1) {
 		level = pwr->max_pwrlevel;
-		pwr->wakeup_maxpwrlevel = 0;
 	} else {
 		level = pwr->default_pwrlevel;
 	}
+	pwr->wakeup_maxpwrlevel = 0;
 
 	kgsl_pwrctrl_pwrlevel_change(device, level);
 

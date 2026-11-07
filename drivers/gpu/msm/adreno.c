@@ -7,6 +7,7 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/input.h>
+#include <linux/kprofiles.h>
 #include <linux/interconnect.h>
 #include <linux/io.h>
 #include <linux/of.h>
@@ -377,6 +378,10 @@ static void adreno_input_work(struct work_struct *work)
 
 	mutex_lock(&device->mutex);
 
+	if (kp_active_mode() == 1) {
+		mutex_unlock(&device->mutex);
+		return;
+	}
 	device->flags |= KGSL_FLAG_WAKE_ON_TOUCH;
 
 	ops->touch_wakeup(adreno_dev);
@@ -395,7 +400,7 @@ static void adreno_input_event(struct input_handle *handle, unsigned int type,
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
 	/* Only consider EV_ABS (touch) events */
-	if (type != EV_ABS)
+	if (type != EV_ABS || kp_active_mode() == 1)
 		return;
 
 	/*

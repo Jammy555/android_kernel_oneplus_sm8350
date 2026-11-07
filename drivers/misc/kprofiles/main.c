@@ -1,25 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * KernelSpace Profiles
- *
- * This Linux kernel module provides a framework for managing and switching between system profiles or modes
- * at the kernel level. Each profile represents a specific configuration of kernel features and settings
- * optimized for different use cases such as battery life, balanced performance, or maximum performance.
- *
- * The module supports various subsystems, including MSM DRM, MI DRM, and framebuffer (FB). It integrates
- * with these subsystems to receive notifications about screen state changes and adjust the active profile
- * accordingly.
- *
- * The module offers functions for setting the profile mode, overriding the mode temporarily, and retrieving
- * the active profile mode. Profiles can be dynamically switched based on system events, user requests, or
- * time-based rules.
- *
- * For more information and usage examples, refer to the README file at:
- * https://github.com/beakthoven/Kprofiles/blob/main/README.md
- *
  * Copyright (C) 2021-2025 Dakkshesh <dakkshesh5@gmail.com>
- * Version: 6.0.0
- * License: GPL-2.0
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -32,6 +14,9 @@
 #include <linux/sysfs.h>
 #include <linux/mutex.h>
 #include <linux/compiler.h>
+#include <linux/cpufreq.h>
+#include <linux/kprofiles.h>
+#include <linux/slab.h>
 #include "version.h"
 
 static BLOCKING_NOTIFIER_HEAD(kp_mode_notifier);
@@ -41,11 +26,7 @@ EXPORT_SYMBOL_GPL(KP_MODE_CHANGE);
 static unsigned int kp_override_mode;
 static bool kp_override;
 
-static bool auto_kp __read_mostly = 0;
-module_param(auto_kp, bool, 0664);
-MODULE_PARM_DESC(auto_kp, "Enable/disable automatic kernel profile management");
-
-static unsigned int kp_mode = CONFIG_KP_DEFAULT_MODE;
+static unsigned int kp_mode = CONFIG_KP_DEFAULT_MODE ?: 2;
 static unsigned int kp_max_freq_ratio_val = 78;
 
 int kp_max_freq_ratio(void)
@@ -57,6 +38,88 @@ EXPORT_SYMBOL_GPL(kp_max_freq_ratio);
 static struct kobject *kp_kobj;
 
 DEFINE_MUTEX(kp_set_mode_rb_lock);
+
+struct kp_policy {
+	struct list_head node;
+	struct cpufreq_policy *policy;
+	struct freq_qos_request ceiling;
+	unsigned int min_freq, max_freq, count;
+	unsigned int frequencies[];
+};
+
+static LIST_HEAD(kp_policies);
+static DEFINE_MUTEX(kp_policy_lock);
+
+static unsigned int kp_policy_ceiling(struct kp_policy *p)
+{
+	unsigned int i, limit, best = p->min_freq;
+
+	if (kp_active_mode() != 1)
+		return FREQ_QOS_MAX_DEFAULT_VALUE;
+
+	limit = (u64)p->max_freq * kp_max_freq_ratio() / 100;
+	if (!p->count)
+		return max(limit, best);
+
+	for (i = 0; i < p->count; i++)
+		if (p->frequencies[i] <= limit && p->frequencies[i] > best)
+			best = p->frequencies[i];
+	return best;
+}
+
+static int kp_policy_event(struct notifier_block *nb, unsigned long event,
+			   void *data)
+{
+	struct cpufreq_policy *policy = data;
+	struct kp_policy *p, *tmp;
+	struct cpufreq_frequency_table *entry;
+	unsigned int count = 0, i = 0;
+	int ret = 0;
+
+	mutex_lock(&kp_policy_lock);
+	if (event == CPUFREQ_CREATE_POLICY) {
+		if (policy->freq_table)
+			cpufreq_for_each_valid_entry(entry, policy->freq_table)
+				count++;
+		p = kzalloc(struct_size(p, frequencies, count), GFP_KERNEL);
+		if (!p) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		p->policy = policy;
+		p->min_freq = policy->cpuinfo.min_freq;
+		p->max_freq = policy->cpuinfo.max_freq;
+		p->count = count;
+		/* The driver may release its frequency table when a policy goes offline. */
+		if (policy->freq_table)
+			cpufreq_for_each_valid_entry(entry, policy->freq_table)
+				p->frequencies[i++] = entry->frequency;
+		ret = freq_qos_add_request(&policy->constraints, &p->ceiling,
+					   FREQ_QOS_MAX, kp_policy_ceiling(p));
+		if (ret < 0)
+			kfree(p);
+		else
+			list_add_tail(&p->node, &kp_policies);
+	} else if (event == CPUFREQ_REMOVE_POLICY) {
+		list_for_each_entry_safe(p, tmp, &kp_policies, node) {
+			if (p->policy != policy)
+				continue;
+			freq_qos_remove_request(&p->ceiling);
+			list_del(&p->node);
+			kfree(p);
+			break;
+		}
+	}
+out:
+	mutex_unlock(&kp_policy_lock);
+	if (ret < 0)
+		pr_err("Failed to register CPU%u ceiling: %d\n", policy->cpu, ret);
+	return notifier_from_errno(ret < 0 ? ret : 0);
+}
+
+static struct notifier_block kp_policy_notifier = {
+	.notifier_call = kp_policy_event,
+};
 
 #ifdef CONFIG_KP_VERBOSE_DEBUG
 #define kp_dbg(fmt, ...)	pr_info(fmt, ##__VA_ARGS__)
@@ -74,7 +137,7 @@ static __always_inline int __kp_set_mode(unsigned int level)
 	if (unlikely(level > 3))
 		return -EINVAL;
 
-	WRITE_ONCE(kp_mode, level);
+	WRITE_ONCE(kp_mode, level ?: 2);
 	return 0;
 }
 
@@ -168,16 +231,11 @@ EXPORT_SYMBOL_GPL(kp_set_mode);
  */
 int kp_active_mode(void)
 {
+	/* A temporary kernel boost must not override the user's battery profile. */
+	if (READ_ONCE(kp_mode) == 1)
+		return 1;
 	if (READ_ONCE(kp_override))
-		return READ_ONCE(kp_override_mode);
-
-	if (unlikely(READ_ONCE(kp_mode) > 3)) {
-		WRITE_ONCE(kp_mode, 0);
-		kp_trigger_mode_change_event();
-		kp_err("Invalid value passed, falling back to level 0\n");
-	}
-	if (READ_ONCE(kp_mode) == 0)
-		WRITE_ONCE(kp_mode, 2);
+		return READ_ONCE(kp_override_mode) ?: 2;
 
 	return READ_ONCE(kp_mode);
 }
@@ -193,6 +251,12 @@ EXPORT_SYMBOL_GPL(kp_active_mode);
 static __always_inline void kp_trigger_mode_change_event(void)
 {
 	unsigned int current_mode = kp_active_mode();
+	struct kp_policy *p;
+
+	mutex_lock(&kp_policy_lock);
+	list_for_each_entry(p, &kp_policies, node)
+		freq_qos_update_request(&p->ceiling, kp_policy_ceiling(p));
+	mutex_unlock(&kp_policy_lock);
 
 	blocking_notifier_call_chain(&kp_mode_notifier, KP_MODE_CHANGE,
 				     (void *)(uintptr_t)current_mode);
@@ -284,7 +348,10 @@ static inline ssize_t kp_max_freq_ratio_store(struct kobject *kobj,
 	if (new_ratio < 10 || new_ratio > 100)
 		return -EINVAL;
 
+	mutex_lock(&kp_set_mode_rb_lock);
 	WRITE_ONCE(kp_max_freq_ratio_val, new_ratio);
+	kp_trigger_mode_change_event();
+	mutex_unlock(&kp_set_mode_rb_lock);
 
 	return count;
 }
@@ -306,17 +373,22 @@ static int __init kp_init(void)
 {
 	int ret = 0;
 
+	ret = cpufreq_register_notifier(&kp_policy_notifier, CPUFREQ_POLICY_NOTIFIER);
+	if (ret)
+		return ret;
+
 	kp_kobj = kobject_create_and_add("kprofiles", kernel_kobj);
 	if (!kp_kobj) {
 		kp_err("Failed to create Kprofiles kobject\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto unregister;
 	}
 
 	ret = sysfs_create_group(kp_kobj, &kp_attr_group);
 	if (ret) {
 		kp_err("Failed to create sysfs attributes for Kprofiles\n");
 		kobject_put(kp_kobj);
-		return ret;
+		goto unregister;
 	}
 
 	kp_info("Kprofiles " KPROFILES_VERSION
@@ -324,15 +396,12 @@ static int __init kp_init(void)
 	kp_info("Copyright (C) 2021-2025 Dakkshesh <dakkshesh5@gmail.com>.\n");
 
 	return ret;
+unregister:
+	cpufreq_unregister_notifier(&kp_policy_notifier, CPUFREQ_POLICY_NOTIFIER);
+	return ret;
 }
-module_init(kp_init);
-
-static void __exit kp_exit(void)
-{
-	sysfs_remove_group(kp_kobj, &kp_attr_group);
-	kobject_put(kp_kobj);
-}
-module_exit(kp_exit);
+/* Register before cpufreq drivers create policies. */
+postcore_initcall(kp_init);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("KernelSpace Profiles");

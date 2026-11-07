@@ -8,6 +8,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/kprofiles.h>
 #include "sched.h"
 
 #include <linux/sched/cpufreq.h>
@@ -495,6 +496,12 @@ static void sugov_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
 {
 	bool set_iowait_boost = flags & SCHED_CPUFREQ_IOWAIT;
 
+	if (kp_active_mode() == 1) {
+		sg_cpu->iowait_boost = 0;
+		sg_cpu->iowait_boost_pending = false;
+		return;
+	}
+
 	/* Reset boost if the CPU appears to have been idle enough */
 	if (sg_cpu->iowait_boost &&
 	    sugov_iowait_reset(sg_cpu, time, set_iowait_boost))
@@ -545,7 +552,7 @@ static unsigned long sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time,
 	unsigned long boost;
 
 	/* No boost currently required */
-	if (!sg_cpu->iowait_boost)
+	if (!sg_cpu->iowait_boost || kp_active_mode() == 1)
 		return util;
 
 	/* Reset boost if the CPU appears to have been idle enough */
@@ -602,7 +609,7 @@ static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 	bool is_hiload;
 	unsigned long pl = sg_cpu->walt_load.pl;
 
-	if (use_pelt())
+	if (use_pelt() || kp_active_mode() == 1)
 		return;
 
 	if (is_rtg_boost)

@@ -3,12 +3,14 @@
 # Copyright (C) 2021-2023 Dakkshesh <dakkshesh5@gmail.com>.
 
 config KPROFILES
-	tristate "Kprofiles Kernel Module"
+	bool "Kprofiles kernel profiles"
+	depends on CPU_FREQ
 	default y
 	help
 	  This allows you to regulate in-kernel activities in a profile-oriented manner.
 	  It creates a sysfs node which can be used to change profiles via userspace.
-	  It provides 4 profile modes: Disabled, Battery, Balanced and Performance.
+	  It provides Battery, Balanced and Performance profiles. Mode 0 is an
+	  alias for Balanced. Scheduler and boost consumers are built into the kernel.
 
 	  The former can be used to disable/enable or tune kernel activities according
 	  to a profile mode. Check the README.md for more information.

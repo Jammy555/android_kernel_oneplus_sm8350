@@ -12,6 +12,7 @@
  * management can be a bitch. See 'mm/memory.c': 'copy_page_range()'
  */
 
+#include <linux/kprofiles.h>
 #include <linux/anon_inodes.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
@@ -2461,7 +2462,6 @@ struct task_struct *fork_idle(int cpu)
  *
  * args->exit_signal is expected to be checked for sanity by the caller.
  */
-extern int kp_active_mode(void);
 long _do_fork(struct kernel_clone_args *args)
 {
 	u64 clone_flags = args->flags;
@@ -2471,18 +2471,14 @@ long _do_fork(struct kernel_clone_args *args)
 	int trace = 0;
 	long nr;
 
-	/* Boost DDR bus to the max for 50 ms when userspace launches an app */
+	/* Launch boosts remain disabled in the user's battery profile. */
 	if (task_is_zygote(current)) {
-	  /*
-	   * Dont boost CPU & DDR if battery saver profile is enabled
-	   * and boost CPU & DDR for 25ms if balanced profile is enabled
-	   */
-		if (kp_active_mode() == 3 || kp_active_mode() == 0) {
+		if (kp_active_mode() == 3) {
 			cpu_input_boost_kick_max(50);
 			devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 50);
 		} else if (kp_active_mode() == 2) {
-	    		cpu_input_boost_kick_max(25);
-	    		devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 25);
+			cpu_input_boost_kick_max(25);
+			devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 25);
 		}
 	}
 
