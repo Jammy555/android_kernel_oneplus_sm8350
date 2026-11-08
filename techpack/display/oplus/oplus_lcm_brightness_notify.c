@@ -10,6 +10,7 @@
 **  Six.Xu          2021/09/26    1.0               Display notifier
 *******************************************************************/
 #include <linux/msm_drm_notify.h>
+#include <linux/module.h>
 
 static BLOCKING_NOTIFIER_HEAD(lcdinfo_notifiers);
 int register_lcdinfo_notifier(struct notifier_block *nb)
@@ -29,3 +30,5 @@ void lcdinfo_notify(unsigned long val, void *v)
 	blocking_notifier_call_chain(&lcdinfo_notifiers, val, v);
 }
 EXPORT_SYMBOL(lcdinfo_notify);
+
+MODULE_LICENSE("GPL");
