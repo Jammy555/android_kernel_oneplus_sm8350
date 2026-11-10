@@ -1099,7 +1099,7 @@ export PGO_STRIP_SRCTREE
 # The profile is collected with value profiling off, so use it the same way.
 ifdef CONFIG_PGO_CLANG_USE
 KBUILD_CFLAGS += -fprofile-use=$(abs_srctree)/kernel/pgo/vmlinux.profdata \
-	-mllvm -disable-vp=true $(PGO_STRIP_SRCTREE) \
+	-mllvm -disable-vp=true -mllvm -no-pgo-warn-mismatch=true $(PGO_STRIP_SRCTREE) \
 	-Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date \
 	-Wno-profile-instr-missing
 endif
