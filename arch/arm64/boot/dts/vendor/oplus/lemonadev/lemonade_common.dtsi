@@ -395,6 +395,12 @@
 		pinctrl-0 = <&downhall_tri_state_key_active>;
 	};
 };
+&qupv3_se13_i2c {
+	/* No FM radio on this board: tlmm 50 is the up hall IC's INT. */
+	nq@64 {
+		status = "disabled";
+	};
+};
 &tlmm {
 	ist8801_hall_up_active: ist8801_hall_up_active {
 		mux {
