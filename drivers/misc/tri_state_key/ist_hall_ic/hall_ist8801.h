@@ -13,6 +13,7 @@
 
 #include <linux/ioctl.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/pm_wakeup.h>
 
 
@@ -287,7 +288,9 @@ struct ist8801_data_t {
 	struct pinctrl_state *power_state;
 	struct pinctrl_state *irq_state;
 	union ist8801_reg_t		reg;
-	bool			irq_enabled;
+	spinlock_t		irq_lock;
+	bool			is_irq_requested;
+	bool			is_irq_disabled;
 	unsigned int		id;
 	int			calibrated_data;
 	int			irq_source;

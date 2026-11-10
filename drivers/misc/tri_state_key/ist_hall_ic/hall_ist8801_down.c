@@ -586,6 +586,8 @@ static int ist8801_set_operation_mode(struct ist8801_data_t *ist8801_data,
 /* functions for interrupt handler */
 static irqreturn_t ist8801_down_irq_handler(int irq, void *dev_id)
 {
+	unsigned long flags;
+
 	TRI_KEY_LOG("call\n");
 
 	if (!g_ist8801_data) {
@@ -593,7 +595,13 @@ static irqreturn_t ist8801_down_irq_handler(int irq, void *dev_id)
 		return -EINVAL;
 	}
 
-	disable_irq_nosync(g_ist8801_data->irq);
+	spin_lock_irqsave(&g_ist8801_data->irq_lock, flags);
+	if (g_ist8801_data->is_irq_requested && !g_ist8801_data->is_irq_disabled) {
+		disable_irq_nosync(g_ist8801_data->irq);
+		g_ist8801_data->is_irq_disabled = true;
+	}
+	spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
+
 	__pm_wakeup_event(&g_ist8801_data->source, 2000);
 	oplus_hall_irq_handler(1);
 
@@ -635,52 +643,72 @@ static int ist8801_set_detection_mode(u8 mode)
 				(mode == 0) ? "POLLING":"INTERRUPT");
 
 	if (mode & DETECTION_MODE_INTERRUPT) {
-		if (!g_ist8801_data->irq_enabled) {
-			data = g_ist8801_data->reg.map.intsrs |
-				IST8801_DETECTION_MODE_INTERRUPT;
-			err = ist8801_i2c_write_block(g_ist8801_data,
-				IST8801_REG_INTSRS, &data, 1);
-			if (err < 0) {
-				TRI_KEY_ERR("config interrupt fail %d\n", err);
-				return err;
-			}
+		unsigned long flags;
 
-			err = ist8801_clear_interrupt(g_ist8801_data);
-			if (err < 0) {
-				TRI_KEY_ERR("clear interrupt fail %d\n", err);
-				return err;
-			}
-
-			/* request irq */
-			err = request_threaded_irq(g_ist8801_data->irq, NULL,
-			&ist8801_down_irq_handler,
-			IRQ_TYPE_EDGE_FALLING | IRQF_ONESHOT,
-			"ist8801_down", (void *)g_ist8801_data->client);
-			if (err < 0) {
-				TRI_KEY_ERR("IRQ LINE NOT AVAILABLE!!\n");
-				return -EINVAL;
-			}
-			irq_set_irq_wake(g_ist8801_data->irq, 1);
-
-			g_ist8801_data->irq_enabled = 1;
+		spin_lock_irqsave(&g_ist8801_data->irq_lock, flags);
+		if (g_ist8801_data->is_irq_requested) {
+			spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
+			return 0;
 		}
+		spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
+
+		data = g_ist8801_data->reg.map.intsrs |
+			IST8801_DETECTION_MODE_INTERRUPT;
+		err = ist8801_i2c_write_block(g_ist8801_data,
+			IST8801_REG_INTSRS, &data, 1);
+		if (err < 0) {
+			TRI_KEY_ERR("config interrupt fail %d\n", err);
+			return err;
+		}
+
+		err = ist8801_clear_interrupt(g_ist8801_data);
+		if (err < 0) {
+			TRI_KEY_ERR("clear interrupt fail %d\n", err);
+			return err;
+		}
+
+		/* request irq */
+		err = request_threaded_irq(g_ist8801_data->irq, NULL,
+		&ist8801_down_irq_handler,
+		IRQ_TYPE_EDGE_FALLING | IRQF_ONESHOT,
+		"ist8801_down", (void *)g_ist8801_data->client);
+		if (err < 0) {
+			TRI_KEY_ERR("IRQ LINE NOT AVAILABLE!!\n");
+			return -EINVAL;
+		}
+		irq_set_irq_wake(g_ist8801_data->irq, 1);
+
+		spin_lock_irqsave(&g_ist8801_data->irq_lock, flags);
+		g_ist8801_data->is_irq_requested = true;
+		g_ist8801_data->is_irq_disabled = false;
+		spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
 	} else {
-		if (g_ist8801_data->irq_enabled) {
-			data = g_ist8801_data->reg.map.intsrs &
-				(0xFF - IST8801_DETECTION_MODE_INTERRUPT);
+		unsigned long flags;
+		bool was_requested;
 
-			err = ist8801_i2c_write_block(g_ist8801_data,
-					IST8801_REG_INTSRS, &data, 1);
-			if (err < 0) {
-				TRI_KEY_ERR("config interrupt fail %d\n", err);
-				return err;
-			}
-
-			disable_irq(g_ist8801_data->irq);
-			free_irq(g_ist8801_data->irq, NULL);
-
-			g_ist8801_data->irq_enabled = 0;
+		spin_lock_irqsave(&g_ist8801_data->irq_lock, flags);
+		was_requested = g_ist8801_data->is_irq_requested;
+		g_ist8801_data->is_irq_requested = false;
+		if (g_ist8801_data->is_irq_disabled) {
+			enable_irq(g_ist8801_data->irq);
+			g_ist8801_data->is_irq_disabled = false;
 		}
+		spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
+
+		if (!was_requested)
+			return 0;
+
+		data = g_ist8801_data->reg.map.intsrs &
+			(0xFF - IST8801_DETECTION_MODE_INTERRUPT);
+
+		err = ist8801_i2c_write_block(g_ist8801_data,
+				IST8801_REG_INTSRS, &data, 1);
+		if (err < 0) {
+			TRI_KEY_ERR("config interrupt fail %d\n", err);
+		}
+
+		disable_irq(g_ist8801_data->irq);
+		free_irq(g_ist8801_data->irq, (void *)g_ist8801_data->client);
 	}
 
 	return 0;
@@ -688,15 +716,31 @@ static int ist8801_set_detection_mode(u8 mode)
 
 static int ist8801_enable_irq(bool enable)
 {
+	unsigned long flags;
+
 	if (g_ist8801_data == NULL) {
 		TRI_KEY_LOG("g_ist8801_data NULL\n");
 		return -EINVAL;
 	}
 
-	if (enable)
-		enable_irq(g_ist8801_data->irq);
-	else
-		disable_irq_nosync(g_ist8801_data->irq);
+	spin_lock_irqsave(&g_ist8801_data->irq_lock, flags);
+	if (!g_ist8801_data->is_irq_requested) {
+		spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
+		return 0;
+	}
+
+	if (enable) {
+		if (g_ist8801_data->is_irq_disabled) {
+			enable_irq(g_ist8801_data->irq);
+			g_ist8801_data->is_irq_disabled = false;
+		}
+	} else {
+		if (!g_ist8801_data->is_irq_disabled) {
+			disable_irq_nosync(g_ist8801_data->irq);
+			g_ist8801_data->is_irq_disabled = true;
+		}
+	}
+	spin_unlock_irqrestore(&g_ist8801_data->irq_lock, flags);
 	return 0;
 }
 
@@ -915,33 +959,48 @@ static int ist8801_parse_dts(struct device *dev, struct ist8801_data_t *p_data)
 	}
 
 	p_data->irq_gpio = of_get_named_gpio(np, "dhall,irq-gpio", 0);
+	if (p_data->irq_gpio < 0) {
+		rc = p_data->irq_gpio;
+		TRI_KEY_ERR("failed to get irq_gpio: %d\n", rc);
+		return rc;
+	}
 
 	p_data->power_2v8 = regulator_get(&p_data->client->dev, "vdd");
 	if (IS_ERR_OR_NULL(p_data->power_2v8)) {
-		TRI_KEY_ERR("Regulator get failed vdd_2v8\n");
-		goto err;
+		rc = p_data->power_2v8 ? PTR_ERR(p_data->power_2v8) : -ENODEV;
+		TRI_KEY_ERR("Regulator get failed vdd_2v8: %d\n", rc);
+		p_data->power_2v8 = NULL;
+		goto err_vdd;
 	}
 
 	p_data->power_1v8 = regulator_get(&p_data->client->dev, "vio");
 	if (IS_ERR_OR_NULL(p_data->power_1v8)) {
-		TRI_KEY_ERR("Regulator get failed vcc_1v8\n");
-		goto err;
+		rc = p_data->power_1v8 ? PTR_ERR(p_data->power_1v8) : -ENODEV;
+		TRI_KEY_ERR("Regulator get failed vcc_1v8: %d\n", rc);
+		p_data->power_1v8 = NULL;
+		goto err_vio;
 	}
 
 	p_data->pctrl = devm_pinctrl_get(&p_data->client->dev);
 	if (IS_ERR_OR_NULL(p_data->pctrl)) {
-		TRI_KEY_ERR("failed to get pinctrl\n");
-		goto err;
+		rc = p_data->pctrl ? PTR_ERR(p_data->pctrl) : -ENODEV;
+		TRI_KEY_ERR("failed to get pinctrl: %d\n", rc);
+		p_data->pctrl = NULL;
+		goto err_pctrl;
 	}
 
 	p_data->irq_state = pinctrl_lookup_state(p_data->pctrl,
 		"ist8801_hall_down_active");
 	if (IS_ERR_OR_NULL(p_data->irq_state)) {
-		rc = PTR_ERR(p_data->irq_state);
+		rc = p_data->irq_state ? PTR_ERR(p_data->irq_state) : -ENODEV;
 		TRI_KEY_ERR("pinctrl_lookup_state, err:%d\n", rc);
-		goto err;
+		goto err_pctrl;
 	} else {
-		pinctrl_select_state(p_data->pctrl, p_data->irq_state);
+		rc = pinctrl_select_state(p_data->pctrl, p_data->irq_state);
+		if (rc) {
+			TRI_KEY_ERR("pinctrl_select_state failed, err:%d\n", rc);
+			goto err_pctrl;
+		}
 	}
 
 	p_data->enable_hidden = of_property_read_bool(np, "hall,bias_support");
@@ -953,7 +1012,18 @@ static int ist8801_parse_dts(struct device *dev, struct ist8801_data_t *p_data)
 			p_data->bias_ratio = value;
 	}
 	return 0;
-err:
+
+err_pctrl:
+	if (p_data->power_1v8) {
+		regulator_put(p_data->power_1v8);
+		p_data->power_1v8 = NULL;
+	}
+err_vio:
+	if (p_data->power_2v8) {
+		regulator_put(p_data->power_2v8);
+		p_data->power_2v8 = NULL;
+	}
+err_vdd:
 	return rc;
 };
 
@@ -1001,15 +1071,23 @@ static int ist8801_i2c_probe(struct i2c_client *client,
 	}
 	p_data->client = client;
 	p_data->dev = &client->dev;
-	g_ist8801_data = p_data;
-	hall_dev->client = client;
-	i2c_set_clientdata(client, hall_dev);
-	hall_dev->dev = &client->dev;
+	spin_lock_init(&p_data->irq_lock);
+	p_data->is_irq_requested = false;
+	p_data->is_irq_disabled = false;
+
 	if (client->dev.of_node) {
 		err = ist8801_parse_dts(&client->dev, p_data);
-		if (err)
-			TRI_KEY_ERR("failed to parse device tree\n");
+		if (err) {
+			TRI_KEY_ERR("failed to parse device tree: %d\n", err);
+			kfree(hall_dev);
+			return err;
+		}
 	}
+
+	g_ist8801_data = p_data;
+	hall_dev->client = client;
+	hall_dev->dev = &client->dev;
+	i2c_set_clientdata(client, hall_dev);
 	ist8801_reconfig(p_data);
 
 	err = ist8801_set_power(p_data, 1);
@@ -1038,9 +1116,18 @@ static int ist8801_i2c_probe(struct i2c_client *client,
 	return 0;
 fail:
 	TRI_KEY_LOG("fail.\n");
+	g_ist8801_data = NULL;
+	i2c_set_clientdata(client, NULL);
 	if (gpio_is_valid(p_data->irq_gpio))
 		gpio_free(p_data->irq_gpio);
-
+	if (p_data->power_1v8) {
+		regulator_put(p_data->power_1v8);
+		p_data->power_1v8 = NULL;
+	}
+	if (p_data->power_2v8) {
+		regulator_put(p_data->power_2v8);
+		p_data->power_2v8 = NULL;
+	}
 	devm_kfree(&client->dev, p_data);
 	kfree(hall_dev);
 	return -ENXIO;
