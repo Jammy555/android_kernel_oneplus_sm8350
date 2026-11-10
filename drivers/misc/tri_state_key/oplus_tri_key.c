@@ -525,7 +525,7 @@ static int judge_interference(struct extcon_dev_data *chip)
 				}
 			}
 		if (delta > calib_DnValueMin - down_tolerance &&
-			delta < calib_DnValueMin + up_mid_tol) {
+			delta < calib_DnValueMin + mid_down_tol) {
 			TRI_KEY_LOG("calib_Min:%d,calib_Sum:%d\n",
 				calib_DnValueMin, calib_DnValueSum);
 
