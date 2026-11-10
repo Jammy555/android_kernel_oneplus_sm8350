@@ -1088,10 +1088,18 @@ KBUILD_CFLAGS	+= $(CC_FLAGS_CFI)
 export CC_FLAGS_CFI
 endif
 
+# Static functions are profiled as "<source path>;<name>"; strip the srctree
+# prefix (one level per path component, plus the leading '/') so a profile
+# taken on one build host matches a build from any other directory.
+PGO_STRIP_SRCTREE := -mllvm -static-func-strip-dirname-prefix=$(words x $(subst /, ,$(abs_srctree)))
+export PGO_STRIP_SRCTREE
+
 # Functions with no profile, or changed since it was taken, are compiled
 # as if there were none; that is expected, so don't warn about it.
+# The profile is collected with value profiling off, so use it the same way.
 ifdef CONFIG_PGO_CLANG_USE
 KBUILD_CFLAGS += -fprofile-use=$(abs_srctree)/kernel/pgo/vmlinux.profdata \
+	-mllvm -disable-vp=true $(PGO_STRIP_SRCTREE) \
 	-Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date \
 	-Wno-profile-instr-missing
 endif
