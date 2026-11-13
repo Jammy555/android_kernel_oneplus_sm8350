@@ -8,6 +8,9 @@
 #include <linux/sched.h>
 #include <linux/task_work.h>
 #include <linux/version.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
 #include "klog.h" // IWYU pragma: keep
 #include "throne_tracker.h"
 #include "runtime/ksud_boot.h"
@@ -41,6 +44,10 @@ static void ksu_track_throne_tw_func(struct callback_head *cb)
 	/* 4.14 kernel/exit.c runs exit_task_work() after exit_fs(). */
 	if (current->flags & PF_EXITING)
 		return;
+#ifdef CONFIG_KSU_SUSFS
+	// Renew the getpriority uid bitmap filter
+	susfs_parse_priority_app_strings();
+#endif // #ifdef CONFIG_KSU_SUSFS
 	track_throne(false);
 }
 

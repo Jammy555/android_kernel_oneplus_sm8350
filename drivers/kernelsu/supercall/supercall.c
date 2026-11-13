@@ -197,6 +197,10 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 			return 0;
 		}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		if (cmd == CMD_SUSFS_SET_PRIORITY_UID_FILTER) {
+			susfs_set_priority_uid_filter(arg);
+			return 0;
+		}
 #ifdef CONFIG_KSU_SUSFS_SUS_MEMFD
 		if (cmd == CMD_SUSFS_ADD_SUS_MEMFD) {
 			susfs_add_sus_memfd(arg);

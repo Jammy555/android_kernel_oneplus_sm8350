@@ -9,7 +9,7 @@
 #include <linux/susfs_def.h>
 #include <linux/statfs.h>
 
-#define SUSFS_VERSION "v2.3.0"
+#define SUSFS_VERSION "v2.4.0"
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
 #define SUSFS_VARIANT "NON-GKI"
 #else
@@ -172,6 +172,12 @@ struct st_susfs_sus_memfd_list {
 };
 #endif
 
+/* getpriority uid filter */
+struct st_susfs_priority_uid_filter {
+	char                                    app_strings[SUSFS_APP_STR_BUF_SIZE];
+	int                                     err;
+};
+
 /* avc log spoofing */
 struct st_susfs_avc_log_spoofing {
 	bool                                    enabled;
@@ -247,6 +253,11 @@ void susfs_add_sus_map(void __user **user_info);
 int susfs_add_sus_memfd(void __user **user_info);
 int susfs_sus_memfd(char *memfd_name);
 #endif
+
+/* getpriority uid filter */
+void susfs_set_priority_uid_filter(void __user **user_info);
+void susfs_parse_priority_app_strings(void);
+bool susfs_is_priority_uid_filtered(uid_t uid);
 
 void susfs_set_avc_log_spoofing(void __user **user_info);
 
